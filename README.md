@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/timklop/thor-control/releases/latest"><b>⬇️ Download the latest release</b></a>
+  <a href="https://github.com/timklop/thor-control/releases/latest"><b>Download the latest release</b></a>
   &nbsp;·&nbsp; <a href="#install">Install</a>
   &nbsp;·&nbsp; <a href="#how-to">How-to</a>
   &nbsp;·&nbsp; <a href="#cheat-sheet">Cheat sheet</a>
@@ -31,7 +31,7 @@ controls one button press away.
 
 ## What you get
 
-### 🎛️ A quick menu on the bottom screen
+### A quick menu on the bottom screen
 
 Tap the **AYN button** and a menu in the style of Android 17's quick settings slides over the
 bottom screen, above any app or game. Two brightness sliders (one per screen), the fan, the
@@ -40,13 +40,13 @@ tile's round icon for the quick action, or the rest of the tile for its page.
 
 <p align="center"><img src="docs/images/menu-pages.png" width="860" alt="Fan, stick lights and game mode pages of the menu"></p>
 
-### 🌀 Fan profiles and your own curves
+### Fan profiles and your own curves
 
 Auto (LineageOS decides), Quiet, Smart, Sport and Max, or draw your own curve by dragging points.
 Above 90 °C the fan always goes to full speed, and with the lid closed it stops (unless the chip
 or the charging port is still hot).
 
-### 🔆 Brightness per screen
+### Brightness per screen
 
 Each screen gets its own brightness, from the menu or straight from the controller:
 **AYN + L1 / R1** for the bottom screen, **AYN + L2 / R2** for the top one. A small pill shows the
@@ -54,12 +54,12 @@ level on the screen you're changing.
 
 <p align="center"><img src="docs/images/brightness-pill.png" width="300" alt="The brightness pill"></p>
 
-### 🎮 The controller goes where you want
+### The controller goes where you want
 
 Send the built-in controller to the top screen, the bottom screen, or let it follow whichever
 screen you touched last. Move the app you're using from one screen to the other with one combo.
 
-### 🚀 Game mode
+### Game mode
 
 Press **AYN + Y** in a game and the Thor is all its: other apps close, background apps stay
 closed, the CPU and GPU are held at their top clocks, the fan switches to Sport, and the bottom
@@ -67,7 +67,7 @@ screen turns off so the launcher there gives back its memory. Every part is a sw
 off. The game itself is never closed, and everything goes back to normal when you leave it or
 the screen turns off.
 
-### 🗂️ Recent apps, rebuilt for a controller
+### Recent apps, rebuilt for a controller
 
 Hold **Home** and the app you're in zooms out into a row of cards, with the home screen always
 on the far right. Flick or press ◀ ▶ to move, **A** to open, **X** to close an app, **Y** to
@@ -79,7 +79,7 @@ close all. A quick press of Home slides you over to the home screen in the same 
   <img src="docs/images/home.gif" width="430" alt="Pressing Home: the app slides away and the home screen zooms in">
 </p>
 
-### ⌨️ Thor Keyboard: type on the bottom screen
+### Thor Keyboard: type on the bottom screen
 
 Whichever screen the text field is on, the keyboard appears on the bottom screen, so it never
 covers what you're typing into. The top half is a **touchpad**: swipe to move the cursor one
@@ -94,14 +94,14 @@ or **Paste**. The keys work like an iPad's: every key shows a number or symbol a
 </p>
 <p align="center"><img src="docs/images/keyboard-accents.png" width="620" alt="Holding e shows its accents"></p>
 
-### 🧠 A leaner system
+### A leaner system
 
 About 400 MB of extra free memory, without losing anything you use: Android stops locking files in
 memory, Trebuchet (only needed for gesture navigation and recents, both replaced) is switched off,
 services for hardware the Thor doesn't have are stopped, and swap compresses better. The
 [details](docs/HOW-IT-WORKS.md#memory) are in How it works.
 
-### ✨ And a few fixes
+### And a few fixes
 
 * The bottom screen has no status bar or notification shade, and the top screen no navigation
   bar: the hardware Home and Back buttons do that job, so apps get the full height.
