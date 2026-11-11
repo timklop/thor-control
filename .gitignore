@@ -1,0 +1,15 @@
+# Build output
+build/
+app/build/
+out/
+.gradle/
+.kotlin/
+
+# Machine-specific
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# Release signing key: kept out of git (see "Signing" in the README)
+keystore/

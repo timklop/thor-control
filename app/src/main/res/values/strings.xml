@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Thor Control</string>
+    <string name="a11y_label">Thor Control menu</string>
+    <string name="a11y_desc">Shows the Thor Control menu above everything on the bottom screen when you press the AYN button. It does not read screen content or keystrokes.</string>
+    <string name="keyboard_label">Thor Keyboard</string>
+    <string name="keyboard_subtype">English (US)</string>
+</resources>

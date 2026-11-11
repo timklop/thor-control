@@ -1,0 +1,3 @@
+# No navigation bar or taskbar on the top screen. The Thor has hardware Home and Back buttons,
+# Home-hold opens Thor Control's recent apps, and Trebuchet (which handled swipe gestures) is off.
+qemu.hw.mainkeys=1

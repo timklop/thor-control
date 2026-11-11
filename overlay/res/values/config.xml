@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PinnerService keeps these files locked in RAM (mlock) for faster launches: framework.jar,
+         services.jar, SystemUI, surfaceflinger, plus the home app (60 MB) and WebView (20 MB).
+         About 320 MB on the Thor that the kernel can never reclaim, even for a game that needs it.
+         Without pinning the parts in active use still stay cached; the rest becomes reclaimable. -->
+    <array name="config_defaultPinnerServiceFiles" />
+    <integer name="config_pinnerHomePinBytes">0</integer>
+    <integer name="config_pinnerWebviewPinBytes">0</integer>
+</resources>

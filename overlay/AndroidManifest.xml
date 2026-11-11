@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static resource overlay on the framework, installed to /product/overlay by the Magisk module.
+     Preinstalled overlays may change any framework config value (framework-res declares no
+     <overlayable> list, so no policy restricts a product-partition overlay). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.thorctl.overlay.framework">
+    <application android:hasCode="false" />
+    <overlay
+        android:targetPackage="android"
+        android:isStatic="true"
+        android:priority="900" />
+</manifest>

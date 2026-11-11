@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Used only for its overlay window layer (TYPE_ACCESSIBILITY_OVERLAY sits above every app,
+     the status bar and the IME, and is not hidden by HIDE_OVERLAY_WINDOWS). No key filtering and
+     no window content access, so it adds no input latency for games. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAnnouncement"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/a11y_desc"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="1000" />
