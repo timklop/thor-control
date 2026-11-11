@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -17,16 +18,21 @@ android {
         versionName = "2.0"
     }
 
-    // The installed app is signed with keystore/thorctl.jks, which is kept out of git. Without it
-    // builds fall back to the debug key, and such an APK can't update the copy already installed.
+    // Release builds are signed with keystore/thorctl.jks; it and its passwords
+    // (keystore/keystore.properties: storePassword, keyAlias, keyPassword) are kept out of git.
+    // Without them builds fall back to the debug key, and such an APK can't update an install
+    // that was signed with the release key.
     val thorKeystore = rootProject.file("keystore/thorctl.jks")
+    val thorKeyProps = Properties().apply {
+        rootProject.file("keystore/keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
     signingConfigs {
-        if (thorKeystore.exists()) {
+        if (thorKeystore.exists() && thorKeyProps.getProperty("storePassword") != null) {
             create("thor") {
                 storeFile = thorKeystore
-                storePassword = "thorctl"
-                keyAlias = "thorctl"
-                keyPassword = "thorctl"
+                storePassword = thorKeyProps.getProperty("storePassword")
+                keyAlias = thorKeyProps.getProperty("keyAlias")
+                keyPassword = thorKeyProps.getProperty("keyPassword")
             }
         }
     }

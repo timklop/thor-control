@@ -67,16 +67,24 @@ Settings live in `/data/adb/thorctl/config.json`; the daemon log in `/data/adb/t
 ./build-module.sh            # -> out/ThorControl-magisk.zip
 ```
 
-Needs the Android SDK (`sdk.dir` in `local.properties`, not in git) with build-tools for `aapt2`,
-`zipalign` and `apksigner` (the framework overlay is built and signed with the debug keystore),
-and JDK 17 (`org.gradle.java.home` in `gradle.properties`).
+You need:
+
+* **JDK 17.** `build-module.sh` uses `JAVA_HOME`, or finds JDK 17 in the usual macOS and Linux
+  places (`java_home -v 17`, Homebrew's `openjdk@17`, `/usr/lib/jvm`). When you run `./gradlew`
+  yourself, point `JAVA_HOME` at JDK 17.
+* **The Android SDK** with platform 37 and build-tools (for `aapt2`, `zipalign` and `apksigner`):
+  `sdk.dir` in `local.properties`, or `ANDROID_HOME`.
+
+The framework overlay is signed with the standard debug key (`~/.android/debug.keystore`, created
+if missing); any key works for it.
 
 ### Signing
 
-The released app is signed with `keystore/thorctl.jks`, which is not in git. Android only accepts
-an update of the installed app when it is signed with the same key. Without the keystore,
-`app/build.gradle.kts` falls back to the debug key: that builds fine, but can't update an existing
-install (remove the module, reboot, then install your build).
+Release builds are signed with `keystore/thorctl.jks`, whose passwords are in
+`keystore/keystore.properties` (`storePassword`, `keyAlias`, `keyPassword`). Neither is in git.
+Without them `app/build.gradle.kts` falls back to the debug key: that builds and runs fine, but
+Android won't let it update an install signed with the release key (for example the one from the
+releases page). Remove the module, reboot, then install your own build.
 
 ## Development
 
