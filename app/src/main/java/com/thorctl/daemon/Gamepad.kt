@@ -2,6 +2,8 @@ package com.thorctl.daemon
 
 import android.os.SystemClock
 import android.system.Os
+import android.system.OsConstants
+import android.system.StructPollfd
 import com.thorctl.shared.GamepadHid
 import com.thorctl.shared.GamepadState
 import java.io.File
@@ -10,14 +12,17 @@ import java.util.Base64
 import kotlin.concurrent.thread
 
 /**
- * Gamepad mode: the built-in controller drives another device as a standard HID gamepad.
+ * Gamepad mode: the built-in controller drives another device as a HID gamepad that hosts know
+ * as a Stadia Controller ([GamepadHid] explains why).
  *
  * The controller is grabbed exclusively (nothing reaches Android) and every evdev frame becomes a
  * HID report the moment its SYN_REPORT arrives:
  *
- *  - USB: an f_hid function is added next to adb in the USB gadget, so a computer sees a
- *    composite device with a gamepad. A writer thread always sends the newest report; f_hid only
- *    blocks while the previous one waits for the host's next poll, so nothing queues up.
+ *  - USB: an f_hid function is added next to adb in the USB gadget, and the gadget takes the
+ *    gamepad's vendor / product ID while it is there, so a computer sees a composite device with a
+ *    gamepad. A writer thread always sends the newest report; f_hid only blocks while the previous
+ *    one waits for the host's next poll, so nothing queues up. A reader drains what the host
+ *    sends (rumble), so the host never stalls on a full queue.
  *  - Bluetooth: the app owns the Bluetooth HID device registration (it needs a Context). Reports
  *    go to it over the socket, newest-wins and at most one per [BT_INTERVAL_MS], so the radio
  *    never builds a backlog.
@@ -46,8 +51,8 @@ internal class Gamepad(
 
     fun init(transport: String, screensOff: Boolean) {
         state = state.copy(transport = transport, screensOff = screensOff)
-        // A crash or reboot in gamepad mode can leave the USB function linked: take it out.
-        if (usbLinked()) thread(name = "gamepad-usb-cleanup", isDaemon = true) { usbTeardown() }
+        // A crash in gamepad mode can leave the USB function linked or the IDs changed: undo it.
+        if (usbLinked() || File(USB_IDS).exists()) thread(name = "gamepad-usb-cleanup", isDaemon = true) { usbTeardown() }
     }
 
     // ---- Control ------------------------------------------------------------------------------
@@ -263,16 +268,31 @@ internal class Gamepad(
         }
 
         fun build(): ByteArray {
-            var buttons = 0
+            val l2 = trigger(lt)
+            val r2 = trigger(rt)
+            var b1 = 0
+            var b2 = 0
             for (c in held) {
-                val bit = when (c) {
-                    in InputWatcher.BTN_SOUTH..InputWatcher.BTN_THUMBR -> c - InputWatcher.BTN_SOUTH
-                    InputWatcher.KEY_HOME -> BIT_HOME
-                    InputWatcher.KEY_BACK -> BIT_BACK
-                    else -> -1
+                when (c) {
+                    InputWatcher.BTN_SOUTH -> b2 = b2 or GamepadHid.B2_A
+                    InputWatcher.BTN_EAST -> b2 = b2 or GamepadHid.B2_B
+                    InputWatcher.BTN_NORTH -> b2 = b2 or GamepadHid.B2_X
+                    InputWatcher.BTN_WEST -> b2 = b2 or GamepadHid.B2_Y
+                    InputWatcher.BTN_TL -> b2 = b2 or GamepadHid.B2_L1
+                    InputWatcher.BTN_TR -> b2 = b2 or GamepadHid.B2_R1
+                    BTN_THUMBL -> b2 = b2 or GamepadHid.B2_L3
+                    InputWatcher.BTN_THUMBR -> b1 = b1 or GamepadHid.B1_R3
+                    InputWatcher.BTN_TL2 -> b1 = b1 or GamepadHid.B1_L2
+                    InputWatcher.BTN_TR2 -> b1 = b1 or GamepadHid.B1_R2
+                    BTN_SELECT -> b1 = b1 or GamepadHid.B1_SELECT
+                    BTN_START -> b1 = b1 or GamepadHid.B1_START
+                    BTN_MODE, InputWatcher.KEY_HOME -> b1 = b1 or GamepadHid.B1_HOME
+                    InputWatcher.KEY_BACK -> b1 = b1 or GamepadHid.B1_CAPTURE
                 }
-                if (bit >= 0) buttons = buttons or (1 shl bit)
             }
+            // The triggers' digital bits, as on the Stadia: pressed past half way.
+            if (l2 >= 128) b1 = b1 or GamepadHid.B1_L2
+            if (r2 >= 128) b1 = b1 or GamepadHid.B1_R2
             val hat = when {
                 hy < 0 && hx == 0 -> 0
                 hy < 0 && hx > 0 -> 1
@@ -285,23 +305,20 @@ internal class Gamepad(
                 else -> 8
             }
             val b = ByteArray(GamepadHid.PAYLOAD)
-            b[0] = buttons.toByte()
-            b[1] = (buttons shr 8).toByte()
-            b[2] = hat.toByte()
-            put16(b, 3, lx)
-            put16(b, 5, ly)
-            put16(b, 7, rx)
-            put16(b, 9, ry)
-            b[11] = trigger(lt).toByte()
-            b[12] = trigger(rt).toByte()
+            b[0] = hat.toByte()
+            b[1] = b1.toByte()
+            b[2] = b2.toByte()
+            b[3] = stick(lx).toByte()
+            b[4] = stick(ly).toByte()
+            b[5] = stick(rx).toByte()
+            b[6] = stick(ry).toByte()
+            b[7] = l2.toByte()
+            b[8] = r2.toByte()
             return b
         }
 
-        private fun put16(b: ByteArray, at: Int, v: Int) {
-            val c = v.coerceIn(-32767, 32767)
-            b[at] = c.toByte()
-            b[at + 1] = (c shr 8).toByte()
-        }
+        /** -32767..32767 (evdev) to 1..255 with 128 in the middle. */
+        private fun stick(v: Int): Int = ((v.coerceIn(-32767, 32767) + 32768) shr 8).coerceIn(1, 255)
 
         /** The analog triggers rest a few counts above 0; a small dead zone keeps them at 0. */
         private fun trigger(v: Int): Int =
@@ -316,10 +333,58 @@ internal class Gamepad(
     @Volatile
     private var usbWriterOn = false
 
+    private val usbIo = ArrayList<Thread>()
+
     private fun startUsbWriter() {
         if (usbWriterOn) return
         usbWriterOn = true
-        thread(name = "gamepad-usb-tx", isDaemon = true) { usbWriteLoop() }
+        synchronized(usbIo) {
+            usbIo += thread(name = "gamepad-usb-tx", isDaemon = true) { usbWriteLoop() }
+            usbIo += thread(name = "gamepad-usb-rx", isDaemon = true) { usbReadLoop() }
+        }
+    }
+
+    /** Before the function goes away: the I/O threads have closed /dev/hidg0. */
+    private fun joinUsbIo() {
+        val ts = synchronized(usbIo) { usbIo.toList().also { usbIo.clear() } }
+        ts.forEach { it.join(1000) }
+    }
+
+    /**
+     * Drains reports from the host (rumble, output report 5). f_hid hands the host a new buffer
+     * only once the previous one is read, so unread reports would leave the host waiting.
+     */
+    private fun usbReadLoop() {
+        val buf = ByteArray(64)
+        while (usbWriterOn) {
+            val fd = try {
+                Os.open(HIDG, OsConstants.O_RDONLY or OsConstants.O_NONBLOCK, 0)
+            } catch (_: Exception) {
+                Thread.sleep(300) // node not there yet
+                continue
+            }
+            try {
+                val p = StructPollfd().apply {
+                    this.fd = fd
+                    events = OsConstants.POLLIN.toShort()
+                }
+                while (usbWriterOn) {
+                    p.revents = 0
+                    if (Os.poll(arrayOf(p), 250) <= 0) continue
+                    val ev = p.revents.toInt()
+                    if (ev and (OsConstants.POLLERR or OsConstants.POLLHUP) != 0) break
+                    if (ev and OsConstants.POLLIN != 0) Os.read(fd, buf, 0, buf.size)
+                }
+            } catch (_: Exception) {
+                // Host gone or nothing to read after all: open again shortly.
+            } finally {
+                try {
+                    Os.close(fd)
+                } catch (_: Exception) {
+                }
+            }
+            if (usbWriterOn) Thread.sleep(250)
+        }
     }
 
     private fun usbWriteLoop() {
@@ -394,10 +459,12 @@ internal class Gamepad(
         // The configuration can only change while unbound. Android's USB HAL rebinds the gadget
         // by itself when adb comes back; any bind after the link includes the gamepad.
         unbind()
+        setGamepadIds()
         try {
             Os.symlink(fn.path, File(cfg, LINK_NAME).path)
         } catch (e: Exception) {
             logw("gamepad: linking the HID function failed", e)
+            restoreIds()
             bind(udc)
             return "USB HID set-up failed"
         }
@@ -407,21 +474,55 @@ internal class Gamepad(
     }
 
     private fun usbTeardown() {
+        joinUsbIo()
         val cfg = configDir() ?: return
         val link = File(cfg, LINK_NAME)
         val udc = udcName()
-        if (usbLinked()) {
+        if (usbLinked() || File(USB_IDS).exists()) {
             unbind()
-            try {
-                Os.remove(link.path)
-            } catch (e: Exception) {
-                logw("gamepad: unlinking the HID function failed", e)
+            if (usbLinked()) {
+                try {
+                    Os.remove(link.path)
+                } catch (e: Exception) {
+                    logw("gamepad: unlinking the HID function failed", e)
+                }
             }
+            restoreIds()
             if (udc.isNotEmpty()) bind(udc)
         }
         File(FUNCTION).delete() // rmdir; fails harmlessly if something still links it
         logi("gamepad: USB HID function removed")
     }
+
+    /**
+     * The whole gadget (adb included) takes the gamepad's IDs; macOS only accepts gamepads it
+     * knows by ID. Android's own IDs are kept in [USB_IDS] (also across a daemon crash).
+     */
+    private fun setGamepadIds() {
+        val f = File(USB_IDS)
+        val cur = USB_ID_ATTRS.map { Sys.read("$GADGET/$it") ?: "" }
+        val pid = cur[1].removePrefix("0x").toIntOrNull(16)
+        if (!f.exists() && pid != null && pid != GamepadHid.PRODUCT_ID) f.writeText(cur.joinToString("\n"))
+        Sys.write("$GADGET/idVendor", hex(GamepadHid.VENDOR_ID))
+        Sys.write("$GADGET/idProduct", hex(GamepadHid.PRODUCT_ID))
+        Sys.write("$GADGET/bcdDevice", hex(GamepadHid.VERSION))
+    }
+
+    /** Android's IDs back (while unbound). */
+    private fun restoreIds() {
+        val f = File(USB_IDS)
+        val saved = try {
+            f.readLines()
+        } catch (_: Exception) {
+            return
+        }
+        if (saved.size == USB_ID_ATTRS.size && saved.all { it.startsWith("0x") }) {
+            USB_ID_ATTRS.forEachIndexed { i, a -> Sys.write("$GADGET/$a", saved[i]) }
+        }
+        f.delete()
+    }
+
+    private fun hex(v: Int) = "0x%04x".format(v)
 
     private fun unbind() {
         Sys.write("$GADGET/UDC", "\n")
@@ -487,13 +588,19 @@ internal class Gamepad(
         const val LINK_NAME = "thor_gamepad"
         const val HIDG = "/dev/hidg0"
 
+        /** Android's USB IDs while the gadget has the gamepad's. */
+        const val USB_IDS = "/data/adb/thorctl/usb-ids"
+        val USB_ID_ATTRS = listOf("idVendor", "idProduct", "bcdDevice")
+
         const val SYN_REPORT = 0
         const val ABS_X = 0x00
         const val ABS_Y = 0x01
         const val ABS_RX = 0x03
         const val ABS_RY = 0x04
-        const val BIT_HOME = 12 // the Home button is the gamepad's guide button (BTN_MODE)
-        const val BIT_BACK = 15
+        const val BTN_SELECT = 314
+        const val BTN_START = 315
+        const val BTN_MODE = 316
+        const val BTN_THUMBL = 317
         const val TRIGGER_DEAD = 10
 
         /** 125 reports a second at most over Bluetooth, the newest always wins. */

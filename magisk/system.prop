@@ -1,3 +1,11 @@
 # No navigation bar or taskbar on the top screen. The Thor has hardware Home and Back buttons,
 # Home-hold opens Thor Control's recent apps, and Trebuchet (which handled swipe gestures) is off.
 qemu.hw.mainkeys=1
+
+# Gamepad mode over Bluetooth: the Device ID record says "Stadia Controller" (USB vendor 18D1,
+# product 9400, version 1.00), the IDs macOS needs to accept the Thor as a game controller. The
+# same IDs are used over USB (see GamepadHid). Read by the Bluetooth stack when it starts.
+bluetooth.device_id.vendor_id_source=2
+bluetooth.device_id.vendor_id=6353
+bluetooth.device_id.product_id=37888
+bluetooth.device_id.version=256

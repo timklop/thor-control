@@ -14,8 +14,8 @@ android {
         applicationId = "com.thorctl"
         minSdk = 34
         targetSdk = 36
-        versionCode = 12
-        versionName = "2.1"
+        versionCode = 13
+        versionName = "2.2"
     }
 
     // Release builds are signed with keystore/thorctl.jks; it and its passwords

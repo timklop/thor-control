@@ -1,6 +1,6 @@
 id=thorctl
 name=Thor Control
-version=2.1
-versionCode=12
+version=2.2
+versionCode=13
 author=thorctl
 description=AYN Thor system controls for LineageOS: fan profiles, per-screen brightness, controller routing and gamepad mode, stick lights, recent apps, Thor Keyboard and an AYN-button quick menu. Runs a root service plus a persistent system app.

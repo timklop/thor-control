@@ -626,7 +626,7 @@ fun GamepadPage(state: DaemonState?, onBack: () -> Unit) {
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Play on a PC, console or phone with the Thor's controller. It shows up there as a standard gamepad: no drivers or apps needed.",
+            "Play on a Mac, PC, console or phone with the Thor's controller. It shows up there as a Stadia Controller, a gamepad they already know: no drivers or apps needed.",
             style = MaterialTheme.typography.bodyMedium,
             color = cs.onSurfaceVariant,
         )
@@ -670,7 +670,7 @@ fun GamepadPage(state: DaemonState?, onBack: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Text(
             "While gamepad mode is on, the controller only reaches the other device; AYN shortcuts still work here. " +
-                "Linux, SteamOS and Android map every button like an Xbox controller. On Windows and macOS, map it once in Steam.",
+                "Macs list it under Game Controllers. Linux, SteamOS and Android map every button, and Steam knows it everywhere. Paired before? Remove the Thor on the other device and pair again.",
             style = MaterialTheme.typography.bodySmall,
             color = cs.onSurfaceVariant,
         )

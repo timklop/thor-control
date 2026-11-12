@@ -61,11 +61,12 @@ screen you touched last. Move the app you're using from one screen to the other 
 
 ### Gamepad mode: play on another device
 
-Use the Thor as a controller for a PC, a Steam Deck, a console or a phone, over a **USB cable** or
-**Bluetooth**. It shows up there as a standard gamepad, so there's nothing to install. Linux,
-SteamOS and Android map every button like an Xbox controller; on Windows and macOS you map it once
-in Steam. Every button press goes out the moment the controller reports it. Optionally both screens
-turn off while it's connected, so they use no power and can't burn in.
+Use the Thor as a controller for a Mac, a PC, a Steam Deck, a console or a phone, over a **USB
+cable** or **Bluetooth**. It presents itself as a Google Stadia Controller, a standard gamepad those
+devices already know, so there's nothing to install. Macs list it under Game Controllers in System
+Settings and games use it directly. Linux, SteamOS and Android map every button, and Steam knows it
+on every system. Every button press goes out the moment the controller reports it. Optionally both
+screens turn off while it's connected, so they use no power and can't burn in.
 
 ### Game mode
 
@@ -219,6 +220,8 @@ Open the menu (**AYN**), tap **Controller**, then **Gamepad mode**.
 * **Bluetooth:** choose **Bluetooth** and switch gamepad mode on. The first time, tap **Pair a new
   device**, tap **Allow** on the top screen, then pair "Thor" from the other device's Bluetooth
   settings. After that the Thor reconnects to the last device by itself.
+* **On a Mac** the Thor appears in System Settings > Game Controllers. Home opens the Games app,
+  as on any controller, Select is Options and Back is Share.
 * **Turn off both screens** puts the Thor to sleep as soon as the other device connects; the
   controller keeps working. **AYN** or the power button turns the screens back on, and they also
   come back on if the connection drops.
@@ -292,6 +295,11 @@ the panel after a few seconds. Tapping **AYN** also wakes it.
 **The other device doesn't see the gamepad over USB.** Use a data cable and make sure nothing
 else on the Thor (a USB mode in Settings) changed the connection; Thor Control adds the gamepad
 back within a few seconds if Android rebuilt it. Some consoles only accept their own controllers.
+
+**A Mac (or another device) connects over Bluetooth but doesn't treat the Thor as a controller.**
+It remembers the Thor's IDs from when the two were first paired, and Thor Control versions up to
+2.1 used different ones. Remove "Thor" from that device's Bluetooth settings, then pair again with
+**Pair a new device**.
 
 **I miss swipe navigation.** Gesture navigation came from Trebuchet, which Thor Control switches
 off to save memory. Switching the module off in Magisk brings both back after a reboot.
