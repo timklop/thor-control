@@ -56,10 +56,29 @@ internal class InputWatcher(private val listener: Listener) {
 
     fun releaseController() = pad.endGrab(Owner.RECENTS)
 
+    /**
+     * Gamepad mode: the controller is grabbed for as long as it lasts and every raw event goes
+     * to [handler]. While AYN is held, events go to combo detection instead, so AYN shortcuts
+     * keep working (and never reach the other device).
+     */
+    fun grabForGamepad(handler: (type: Int, code: Int, value: Int) -> Unit): Boolean =
+        pad.beginGrab(Owner.GAMEPAD, { t, c, v -> if (aynDown) pad.detect(t, c, v) else handler(t, c, v) }, 0)
+
+    fun releaseGamepad() = pad.endGrab(Owner.GAMEPAD)
+
+    /** Gamepad mode still holds a live grab (false if the controller node went away). */
+    fun gamepadGrabbed(): Boolean = pad.holds(Owner.GAMEPAD)
+
+    /** Keys held and axis values right now (as last seen by us). */
+    fun controllerSnapshot(): Pair<Set<Int>, IntArray> = pad.snapshot()
+
+    /** The controller is present (its input node was found). */
+    val hasController: Boolean get() = pad.node != null
+
     /** Whether a controller key is held right now (as last seen by us). */
     fun isDown(code: Int): Boolean = pad.isDown(code)
 
-    private enum class Owner { NONE, AYN, RECENTS }
+    private enum class Owner { NONE, AYN, RECENTS, GAMEPAD }
 
     fun start() {
         logi("input: home remapped=$homeRemapped")
@@ -91,7 +110,12 @@ internal class InputWatcher(private val listener: Listener) {
             logi("watching AYN button on $node")
             try {
                 FileInputStream(node).use { s ->
-                    readEvents(s) { type, code, value -> if (type == EV_KEY && code == KEY_F24) onAyn(value) }
+                    // The lid's hall sensor is a switch on the same node.
+                    lidClosedNow(s.fd)?.let { setLidClosed(it) }
+                    readEvents(s) { type, code, value ->
+                        if (type == EV_KEY && code == KEY_F24) onAyn(value)
+                        if (type == EV_SW && code == SW_LID) setLidClosed(value != 0)
+                    }
                 }
             } catch (e: Exception) {
                 logw("AYN read failed", e)
@@ -106,7 +130,8 @@ internal class InputWatcher(private val listener: Listener) {
                 aynDown = true
                 comboUsed = false
                 // Already grabbed for the recents screen: AYN then only closes it (on release).
-                pad.beginGrab(Owner.AYN, pad::detect, MAX_GRAB_MS)
+                // Grabbed for gamepad mode: that grab's events go to combo detection meanwhile.
+                if (!pad.beginGrab(Owner.AYN, pad::detect, MAX_GRAB_MS)) pad.armCombos()
             }
             0 -> if (aynDown) {
                 aynDown = false
@@ -119,6 +144,62 @@ internal class InputWatcher(private val listener: Listener) {
     private fun combo(c: Combo) {
         comboUsed = true
         post { listener.onCombo(c) }
+    }
+
+    // ---- Lid: the power button does nothing while it is closed ----------------------------------
+    // The power button is a PMIC key that wakes the SoC from suspend. With the lid closed we hold
+    // an exclusive grab on it, so Android never sees the press and the screens stay off; the
+    // device drops back to sleep by itself. The PMIC's long-press hardware reset still works.
+
+    private val lidLock = Any()
+    private var powerGrab: FileInputStream? = null
+
+    @Volatile
+    var lidClosed = false
+        private set
+
+    /** Current lid switch state through EVIOCGSW, or null if it can't be read. */
+    private fun lidClosedNow(fd: FileDescriptor): Boolean? = try {
+        ((IOCTL_INT.invoke(null, fd, EVIOCGSW_4) as Int) and (1 shl SW_LID)) != 0
+    } catch (e: Throwable) {
+        logw("reading the lid switch failed", e)
+        null
+    }
+
+    private fun setLidClosed(closed: Boolean) {
+        synchronized(lidLock) {
+            lidClosed = closed
+            if (closed == (powerGrab != null)) return
+            if (!closed) {
+                try {
+                    powerGrab?.close()
+                } catch (_: Exception) {
+                }
+                powerGrab = null
+                logi("lid open: power button back to normal")
+                return
+            }
+            val node = findNode { it.name == POWER_KEY_NAME } ?: findNode { it.name.contains("pwrkey") && it.hasKey(KEY_POWER) }
+            if (node == null) {
+                logw("power button input node not found")
+                return
+            }
+            val s = try {
+                FileInputStream(node).also { IOCTL_INT.invoke(null, it.fd, EVIOCGRAB) }
+            } catch (e: Throwable) {
+                logw("grabbing the power button failed", e)
+                return
+            }
+            powerGrab = s
+            logi("lid closed: power button ignored ($node)")
+            thread(name = "pwrkey", isDaemon = true) {
+                try {
+                    readEvents(s) { t, c, v -> if (t == EV_KEY && c == KEY_POWER && v == 1) logi("power button pressed with the lid closed: ignored") }
+                } catch (_: Exception) {
+                    // closed when the lid opens
+                }
+            }
+        }
     }
 
     // ---- Controller -------------------------------------------------------------------------------
@@ -178,6 +259,24 @@ internal class InputWatcher(private val listener: Listener) {
         }
 
         fun isDown(code: Int): Boolean = synchronized(lock) { code in keys }
+
+        fun snapshot(): Pair<Set<Int>, IntArray> = synchronized(lock) { HashSet(keys) to abs.copyOf() }
+
+        fun holds(who: Owner): Boolean = synchronized(lock) { owner == who && grabThread?.isAlive == true }
+
+        /** Combo detection starts from what is held now: nothing already down counts as a press. */
+        fun armCombos() {
+            synchronized(lock) {
+                hatX = abs[ABS_HAT0X]
+                hatY = abs[ABS_HAT0Y]
+                trigKey[0] = BTN_TL2 in keys
+                trigKey[1] = BTN_TR2 in keys
+                trigAxis[0] = abs[ABS_Z] >= TRIGGER_ON
+                trigAxis[1] = abs[ABS_RZ] >= TRIGGER_ON
+                trigDown[0] = trigKey[0] || trigAxis[0]
+                trigDown[1] = trigKey[1] || trigAxis[1]
+            }
+        }
 
         /** Grabs the controller exclusively for [who]; false if it is already grabbed or absent. */
         fun beginGrab(who: Owner, handler: (Int, Int, Int) -> Unit, timeoutMs: Long): Boolean {
@@ -412,6 +511,12 @@ internal class InputWatcher(private val listener: Listener) {
         const val EV_SYN = 0
         const val EV_KEY = 1
         const val EV_ABS = 3
+        const val EV_SW = 5
+        const val SW_LID = 0
+        const val KEY_POWER = 116
+        const val KEY_BACK = 158
+        const val BTN_SOUTH = 304 // "A"
+        const val BTN_THUMBR = 318
         const val KEY_F24 = 194
         const val KEY_HOME = 102
         const val KEY_UP = 103
@@ -440,6 +545,10 @@ internal class InputWatcher(private val listener: Listener) {
 
         /** _IOW('E', 0x90, int) */
         const val EVIOCGRAB = 0x40044590
+
+        /** _IOC(_IOC_READ, 'E', 0x1b, 4): the first 32 switch bits. */
+        const val EVIOCGSW_4 = 0x8004451B.toInt()
+        const val POWER_KEY_NAME = "pmic_pwrkey"
         const val MAX_GRAB_MS = 8000L
         const val LONG_HOME_MS = 450L
 

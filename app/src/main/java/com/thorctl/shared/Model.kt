@@ -202,6 +202,119 @@ data class GameState(
     }
 }
 
+/**
+ * Gamepad mode: the built-in controller becomes a standard HID gamepad for another device, over
+ * USB (the Thor as a USB device) or Bluetooth (the Thor as a Bluetooth HID device).
+ */
+data class GamepadState(
+    val on: Boolean = false,
+    /** [USB] or [BLUETOOTH]; kept when gamepad mode is off. */
+    val transport: String = USB,
+    /** A host is using the gamepad (USB: enumerated by a computer; Bluetooth: connected). */
+    val connected: Boolean = false,
+    /** Name of the connected Bluetooth host, or empty. */
+    val host: String = "",
+    /** Put both screens to sleep while a host is connected (the controller keeps working). */
+    val screensOff: Boolean = true,
+    /** USB set-up failed (no gadget support or the port is in host mode). */
+    val error: String = "",
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("on", on)
+        put("transport", transport)
+        put("connected", connected)
+        put("host", host)
+        put("screensOff", screensOff)
+        put("error", error)
+    }
+
+    companion object {
+        const val USB = "usb"
+        const val BLUETOOTH = "bt"
+
+        fun fromJson(o: JSONObject?): GamepadState {
+            if (o == null) return GamepadState()
+            val d = GamepadState()
+            return GamepadState(
+                on = o.optBoolean("on"),
+                transport = o.optString("transport", d.transport).takeIf { it == USB || it == BLUETOOTH } ?: d.transport,
+                connected = o.optBoolean("connected"),
+                host = o.optString("host"),
+                screensOff = o.optBoolean("screensOff", d.screensOff),
+                error = o.optString("error"),
+            )
+        }
+    }
+}
+
+/**
+ * The gamepad's HID report: one report (ID 1) laid out like the Linux xpad driver's events, so
+ * Linux, SteamOS and Android hosts map every control without setup.
+ *
+ *  - 16 buttons: button N is evdev code BTN_SOUTH + N - 1 on a Linux host (A, B, C, X, Y, Z, L1,
+ *    R1, L2, R2, Select, Start, Home, L3, R3), and button 16 is the Thor's Back key.
+ *  - Hat switch (D-pad), 0 = up, clockwise, 8 = centred.
+ *  - Left stick X / Y and right stick Rx / Ry, signed 16 bit.
+ *  - Analog triggers Z (L2) and Rz (R2), 0..255.
+ */
+object GamepadHid {
+    const val REPORT_ID = 1
+
+    /** Bytes after the report ID. */
+    const val PAYLOAD = 13
+
+    val DESCRIPTOR: ByteArray = intArrayOf(
+        0x05, 0x01, // Usage Page (Generic Desktop)
+        0x09, 0x05, // Usage (Game Pad)
+        0xA1, 0x01, // Collection (Application)
+        0x85, REPORT_ID, //   Report ID
+        0x05, 0x09, //   Usage Page (Button)
+        0x19, 0x01, //   Usage Minimum (1)
+        0x29, 0x10, //   Usage Maximum (16)
+        0x15, 0x00, //   Logical Minimum (0)
+        0x25, 0x01, //   Logical Maximum (1)
+        0x75, 0x01, //   Report Size (1)
+        0x95, 0x10, //   Report Count (16)
+        0x81, 0x02, //   Input (Data, Var, Abs)
+        0x05, 0x01, //   Usage Page (Generic Desktop)
+        0x09, 0x39, //   Usage (Hat Switch)
+        0x15, 0x00, //   Logical Minimum (0)
+        0x25, 0x07, //   Logical Maximum (7)
+        0x35, 0x00, //   Physical Minimum (0)
+        0x46, 0x3B, 0x01, //   Physical Maximum (315)
+        0x65, 0x14, //   Unit (Degrees)
+        0x75, 0x04, //   Report Size (4)
+        0x95, 0x01, //   Report Count (1)
+        0x81, 0x42, //   Input (Data, Var, Abs, Null State)
+        0x65, 0x00, //   Unit (None)
+        0x35, 0x00, //   Physical Minimum (0)
+        0x45, 0x00, //   Physical Maximum (0): physical = logical from here on
+        0x75, 0x04, //   Report Size (4)
+        0x95, 0x01, //   Report Count (1)
+        0x81, 0x03, //   Input (Const): padding
+        0x09, 0x30, //   Usage (X)
+        0x09, 0x31, //   Usage (Y)
+        0x09, 0x33, //   Usage (Rx)
+        0x09, 0x34, //   Usage (Ry)
+        0x16, 0x01, 0x80, //   Logical Minimum (-32767)
+        0x26, 0xFF, 0x7F, //   Logical Maximum (32767)
+        0x75, 0x10, //   Report Size (16)
+        0x95, 0x04, //   Report Count (4)
+        0x81, 0x02, //   Input (Data, Var, Abs)
+        0x09, 0x32, //   Usage (Z)
+        0x09, 0x35, //   Usage (Rz)
+        0x15, 0x00, //   Logical Minimum (0)
+        0x26, 0xFF, 0x00, //   Logical Maximum (255)
+        0x75, 0x08, //   Report Size (8)
+        0x95, 0x02, //   Report Count (2)
+        0x81, 0x02, //   Input (Data, Var, Abs)
+        0xC0, // End Collection
+    ).map { it.toByte() }.toByteArray()
+
+    /** Everything released, sticks centred. */
+    fun neutral(): ByteArray = ByteArray(PAYLOAD).also { it[2] = 8 }
+}
+
 /** Full control state, pushed by the daemon whenever anything changes. */
 data class DaemonState(
     val fanProfile: String,
@@ -217,6 +330,7 @@ data class DaemonState(
     /** Profile game mode is running instead of [fanProfile], or empty. */
     val fanOverride: String = "",
     val game: GameState = GameState(),
+    val gamepad: GamepadState = GamepadState(),
 ) {
     val activeProfile: FanProfile
         get() = profiles.firstOrNull { it.id == fanProfile } ?: FanProfile.BUILTINS.first()
@@ -239,6 +353,7 @@ data class DaemonState(
         put("fanKernelMode", fanKernelMode)
         put("fanOverride", fanOverride)
         put("game", game.toJson())
+        put("gamepad", gamepad.toJson())
     }
 
     companion object {
@@ -257,6 +372,7 @@ data class DaemonState(
                 fanKernelMode = o.optBoolean("fanKernelMode", true),
                 fanOverride = o.optString("fanOverride"),
                 game = GameState.fromJson(o.optJSONObject("game")),
+                gamepad = GamepadState.fromJson(o.optJSONObject("gamepad")),
             )
         }
     }

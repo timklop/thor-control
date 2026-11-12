@@ -12,6 +12,9 @@ until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 1; done
 
 # Permissions the app needs for its fallback overlay and to keep its accessibility service on.
 pm grant $PKG android.permission.WRITE_SECURE_SETTINGS 2>/dev/null
+# Gamepad mode over Bluetooth (registering as a HID device, the "make visible" prompt).
+pm grant $PKG android.permission.BLUETOOTH_CONNECT 2>/dev/null
+pm grant $PKG android.permission.BLUETOOTH_ADVERTISE 2>/dev/null
 appops set $PKG SYSTEM_ALERT_WINDOW allow 2>/dev/null
 # Thor Keyboard stays available in the keyboard list (choosing it as the keyboard is up to you).
 ime enable $PKG/.app.ThorKeyboard >/dev/null 2>&1

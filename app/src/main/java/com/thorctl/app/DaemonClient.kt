@@ -98,6 +98,8 @@ object DaemonClient {
                 "haptic" -> main.post { OverlayController.haptic() }
                 "recents", "recents_thumb", "recents_key", "recents_close", "home_anim" -> main.post { RecentsController.onEvent(o) }
                 "kb_key" -> main.post { KeyboardController.onControllerKey(o.optString("key")) }
+                // Gamepad mode over Bluetooth: straight to the radio, off the main thread.
+                "gp_report" -> BluetoothGamepad.send(o.optString("r"))
             }
         } catch (e: Exception) {
             Log.w(TAG, "bad line: $line", e)
@@ -174,6 +176,15 @@ object DaemonClient {
     fun overlayDone() = send(JSONObject().put("cmd", "overlay_done"))
 
     fun keyboardVisible(on: Boolean) = send(JSONObject().put("cmd", "kb_visible").put("on", on))
+
+    fun setGamepad(on: Boolean) = send(JSONObject().put("cmd", "gamepad").put("on", on))
+
+    fun setGamepadTransport(t: String) = send(JSONObject().put("cmd", "gamepad_transport").put("transport", t))
+
+    fun setGamepadScreensOff(on: Boolean) = send(JSONObject().put("cmd", "gamepad_screens_off").put("on", on))
+
+    fun gamepadBluetooth(connected: Boolean, host: String) =
+        send(JSONObject().put("cmd", "gamepad_bt").put("connected", connected).put("host", host))
 
     fun moveApp(toBottom: Boolean) =
         send(JSONObject().put("cmd", "move_app").put("to", if (toBottom) Proto.TARGET_BOTTOM else Proto.TARGET_TOP))

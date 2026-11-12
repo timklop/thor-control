@@ -2,6 +2,7 @@ package com.thorctl.daemon
 
 import com.thorctl.shared.FanProfile
 import com.thorctl.shared.GameOptions
+import com.thorctl.shared.GamepadState
 import com.thorctl.shared.LedState
 import com.thorctl.shared.Proto
 import org.json.JSONArray
@@ -17,6 +18,10 @@ internal class ConfigStore(private val file: File) {
     var keepAccessibility: Boolean = true
     var gameOptions: GameOptions = GameOptions()
 
+    // Gamepad mode itself always starts off; how it connects is remembered.
+    var gamepadTransport: String = GamepadState.USB
+    var gamepadScreensOff: Boolean = true
+
     fun load() {
         try {
             if (!file.exists()) return
@@ -30,6 +35,10 @@ internal class ConfigStore(private val file: File) {
             leds = LedState.fromJson(o.optJSONObject("leds"))
             keepAccessibility = o.optBoolean("keepAccessibility", true)
             gameOptions = GameOptions.fromJson(o.optJSONObject("gameOptions"))
+            o.optJSONObject("gamepad")?.let {
+                gamepadTransport = it.optString("transport", gamepadTransport)
+                gamepadScreensOff = it.optBoolean("screensOff", gamepadScreensOff)
+            }
             logi("config loaded: fan=$fanProfile controller=$controller custom=${customProfiles.size}")
         } catch (e: Exception) {
             logw("config load failed, using defaults", e)
@@ -47,6 +56,7 @@ internal class ConfigStore(private val file: File) {
                 put("leds", leds.toJson())
                 put("keepAccessibility", keepAccessibility)
                 put("gameOptions", gameOptions.toJson())
+                put("gamepad", JSONObject().put("transport", gamepadTransport).put("screensOff", gamepadScreensOff))
             }
             val tmp = File(file.path + ".tmp")
             tmp.writeText(o.toString(2))

@@ -163,17 +163,58 @@ private fun ToolRow(state: KeyboardController.Ui) {
         Spacer(Modifier.width(10.dp))
         Pill(Icons.Rounded.ContentPaste, "Paste") { KeyboardController.paste() }
         Spacer(Modifier.weight(1f))
-        Box(
-            Modifier
-                .size(44.dp)
-                .raised(22.dp, pressed = false)
-                .clip(CircleShape)
-                .background(KeyFill)
-                .pointerInput(Unit) { detectTapGestures(onTap = { KeyboardController.hideKeyboard() }) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.KeyboardHide, "Hide keyboard", tint = KeyInk, modifier = Modifier.size(22.dp))
+        HideButton()
+    }
+}
+
+@Composable
+private fun HideButton() {
+    Box(
+        Modifier
+            .size(44.dp)
+            .raised(22.dp, pressed = false)
+            .clip(CircleShape)
+            .background(KeyFill)
+            .pointerInput(Unit) { detectTapGestures(onTap = { KeyboardController.hideKeyboard() }) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Rounded.KeyboardHide, "Hide keyboard", tint = KeyInk, modifier = Modifier.size(22.dp))
+    }
+}
+
+// ---- Upright: a regular keyboard on the top screen -----------------------------------------------
+
+/** Height of the keyboard on the top screen when the Thor is held upright. */
+val INLINE_KEYBOARD_HEIGHT: Dp = 268.dp
+
+/**
+ * Held upright (the top screen in portrait), the keyboard is an ordinary on-screen keyboard at the
+ * bottom of the top screen, under the app: the same keys, with Paste and hide above them (no
+ * touchpad; the text field is right there to tap).
+ */
+@Composable
+fun InlineKeyboard(ui: StateFlow<KeyboardController.Ui>) {
+    val state by ui.collectAsState()
+    val popup = remember { KeyPopup() }
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .height(INLINE_KEYBOARD_HEIGHT)
+            .background(Brush.verticalGradient(listOf(KbTop, KbBottom))),
+    ) {
+        popup.panelW = constraints.maxWidth.toFloat()
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Pill(Icons.Rounded.ContentPaste, "Paste") { KeyboardController.paste() }
+                Spacer(Modifier.weight(1f))
+                HideButton()
+            }
+            Keys(state, popup, Modifier.fillMaxWidth().weight(1f).padding(start = 2.dp, end = 2.dp, bottom = 3.dp))
         }
+        AccentPopup(popup)
     }
 }
 

@@ -25,7 +25,12 @@ import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.BluetoothSearching
+import androidx.compose.material.icons.rounded.Gamepad
+import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DesktopAccessDisabled
@@ -81,11 +86,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.thorctl.app.BluetoothGamepad
 import com.thorctl.app.DaemonClient
 import com.thorctl.shared.DaemonState
 import com.thorctl.shared.FanPoint
 import com.thorctl.shared.FanProfile
 import com.thorctl.shared.GameState
+import com.thorctl.shared.GamepadState
 import com.thorctl.shared.LedState
 import com.thorctl.shared.Proto
 import com.thorctl.shared.Stats
@@ -483,12 +490,21 @@ private fun Swatch(rgb: Int, selected: Boolean, enabled: Boolean, onClick: () ->
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-fun ControllerPage(state: DaemonState?, onBack: () -> Unit) {
+fun ControllerPage(state: DaemonState?, onBack: () -> Unit, onGamepad: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val cur = state?.controller ?: Proto.TARGET_FREE
+    val gp = state?.gamepad
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PagePadding)) {
         DetailHeader("Controller input", onBack)
         Spacer(Modifier.height(4.dp))
+        NavTile(
+            Icons.Rounded.Gamepad,
+            "Gamepad mode",
+            if (gp != null && gp.on) gamepadSummary(gp) else "Play on a PC, console or phone over USB or Bluetooth",
+            active = gp?.on == true,
+            onClick = onGamepad,
+        )
+        Spacer(Modifier.height(12.dp))
         Text("Choose which screen receives the built-in controller.", style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
         OptionTile(Icons.Rounded.TouchApp, "Follow focus", "Goes to whichever screen you touched last", cur == Proto.TARGET_FREE) {
@@ -571,6 +587,124 @@ fun ShortcutList() {
                 Text(what, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Gamepad mode
+// ---------------------------------------------------------------------------------------------
+
+fun gamepadSummary(g: GamepadState): String {
+    val bt = g.transport == GamepadState.BLUETOOTH
+    return when {
+        !g.on -> "Off"
+        g.error.isNotEmpty() -> g.error
+        g.connected && bt -> "Connected to ${g.host.ifEmpty { "a device" }}"
+        g.connected -> "Connected over USB"
+        bt -> "Bluetooth · waiting for a device"
+        else -> "USB · waiting for a computer"
+    }
+}
+
+@Composable
+fun GamepadPage(state: DaemonState?, onBack: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val g = state?.gamepad ?: GamepadState()
+    val enabled = state != null
+    val bt = g.transport == GamepadState.BLUETOOTH
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PagePadding)) {
+        DetailHeader("Gamepad mode", onBack) {
+            Switch(
+                checked = g.on,
+                onCheckedChange = { DaemonClient.setGamepad(it) },
+                enabled = enabled,
+                thumbContent = {
+                    Icon(if (g.on) Icons.Rounded.Check else Icons.Rounded.Close, null, Modifier.size(SwitchDefaults.IconSize))
+                },
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Play on a PC, console or phone with the Thor's controller. It shows up there as a standard gamepad: no drivers or apps needed.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = cs.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        val desc = when {
+            !g.on && bt -> "Turn it on, then connect from the other device"
+            !g.on -> "Turn it on, then plug the Thor into the other device"
+            g.error.isNotEmpty() -> "Try Bluetooth instead"
+            g.connected -> "The controller now drives that device. AYN turns the screens back on"
+            bt -> "Pair the Thor from the other device's Bluetooth settings, or wait for the last one"
+            else -> "Connect the Thor's USB-C port to the other device"
+        }
+        StatusTile(if (bt) Icons.Rounded.Bluetooth else Icons.Rounded.Usb, gamepadSummary(g), desc, active = g.on && g.connected)
+
+        Spacer(Modifier.height(16.dp))
+        Text("Connection", style = MaterialTheme.typography.titleSmall, color = cs.primary)
+        Spacer(Modifier.height(8.dp))
+        ConnectedChoice(listOf("USB cable", "Bluetooth"), selected = if (bt) 1 else 0, enabled = enabled) {
+            DaemonClient.setGamepadTransport(if (it == 1) GamepadState.BLUETOOTH else GamepadState.USB)
+        }
+        if (bt) {
+            Spacer(Modifier.height(8.dp))
+            NavTile(
+                Icons.Rounded.BluetoothSearching,
+                "Pair a new device",
+                "Makes the Thor visible for two minutes. Tap Allow on the top screen",
+                active = false,
+                enabled = enabled && g.on,
+            ) { BluetoothGamepad.makeDiscoverable() }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text("While connected", style = MaterialTheme.typography.titleSmall, color = cs.primary)
+        Spacer(Modifier.height(8.dp))
+        SwitchTile(
+            Icons.Rounded.DesktopAccessDisabled, "Turn off both screens",
+            "No power to the panels and no burn-in. AYN or power turns them back on",
+            g.screensOff, enabled,
+        ) { DaemonClient.setGamepadScreensOff(it) }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "While gamepad mode is on, the controller only reaches the other device; AYN shortcuts still work here. " +
+                "Linux, SteamOS and Android map every button like an Xbox controller. On Windows and macOS, map it once in Steam.",
+            style = MaterialTheme.typography.bodySmall,
+            color = cs.onSurfaceVariant,
+        )
+    }
+}
+
+/** A row that opens something (a page, a prompt). */
+@Composable
+private fun NavTile(icon: ImageVector, title: String, desc: String, active: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    val qs = qsColors()
+    val motion = MaterialTheme.motionScheme
+    val corner by animateFloatAsState(if (active) 29f else 50f, motion.defaultSpatialSpec(), label = "navCorner")
+    val iconBg by animateColorAsState(if (active) qs.iconActive else qs.iconInactive, motion.defaultEffectsSpec(), label = "navBg")
+    val iconFg by animateColorAsState(if (active) qs.onIconActive else qs.onIconInactive, motion.defaultEffectsSpec(), label = "navFg")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(qs.container)
+            .clickable(enabled = enabled, onClick = onClick)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
+            .padding(start = 8.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(56.dp).clip(RoundedCornerShape(CornerSize(corner))).background(iconBg), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = iconFg)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium), color = qs.text, maxLines = 1)
+            Text(desc, style = MaterialTheme.typography.bodySmall, color = qs.textSecondary, maxLines = 2)
+        }
+        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = qs.textSecondary)
     }
 }
 

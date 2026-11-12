@@ -13,6 +13,7 @@ class ThorApp : Application() {
         super.onCreate()
         DaemonClient.start()
         OverlayController.init(this)
+        BluetoothGamepad.init(this)
     }
 }
 

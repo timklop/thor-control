@@ -81,7 +81,7 @@ import kotlinx.coroutines.flow.StateFlow
 import java.util.Date
 import java.util.Locale
 
-enum class Page { MAIN, FAN, LIGHTS, CONTROLLER, GAME }
+enum class Page(val depth: Int) { MAIN(0), FAN(1), LIGHTS(1), CONTROLLER(1), GAME(1), GAMEPAD(2) }
 
 private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
 private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
@@ -141,7 +141,7 @@ fun MenuPanel(entered: Boolean, onOpenApp: (() -> Unit)?, modifier: Modifier = M
         targetState = page,
         modifier = modifier,
         transitionSpec = {
-            if (targetState != Page.MAIN) {
+            if (targetState.depth > initialState.depth) {
                 (slideInHorizontally(spring(dampingRatio = 0.8f, stiffness = 420f)) { it / 6 } +
                     scaleIn(spring(dampingRatio = 0.8f, stiffness = 420f), initialScale = 0.94f) +
                     fadeIn(tween(160)))
@@ -159,7 +159,8 @@ fun MenuPanel(entered: Boolean, onOpenApp: (() -> Unit)?, modifier: Modifier = M
             Page.MAIN -> MainPage(state, stats, connected, entered, onNavigate = { page = it }, onOpenApp = onOpenApp)
             Page.FAN -> FanPage(state, stats, onBack = back)
             Page.LIGHTS -> LightsPage(state, onBack = back)
-            Page.CONTROLLER -> ControllerPage(state, onBack = back)
+            Page.CONTROLLER -> ControllerPage(state, onBack = back, onGamepad = { page = Page.GAMEPAD })
+            Page.GAMEPAD -> GamepadPage(state, onBack = { page = Page.CONTROLLER })
             Page.GAME -> GamePage(state, stats, onBack = back)
         }
     }
@@ -221,10 +222,15 @@ private fun MainPage(
                 enabled = enabled,
                 modifier = Modifier.weight(1f).enter(3, entered),
             )
+            val gamepad = state?.gamepad
             QsTile(
                 label = "Controller",
-                secondary = controllerLabel(state?.controller),
-                active = state != null && state.controller != Proto.TARGET_FREE,
+                secondary = when {
+                    gamepad?.on != true -> controllerLabel(state?.controller)
+                    gamepad.connected -> "Gamepad · connected"
+                    else -> "Gamepad · waiting"
+                },
+                active = state != null && (state.controller != Proto.TARGET_FREE || state.gamepad.on),
                 icon = { Icon(Icons.Rounded.SportsEsports, null, tint = it) },
                 onClick = { onNavigate(Page.CONTROLLER) },
                 onIconClick = { state?.let { DaemonClient.setController(nextTarget(it.controller)) } },

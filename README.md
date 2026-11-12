@@ -59,6 +59,14 @@ level on the screen you're changing.
 Send the built-in controller to the top screen, the bottom screen, or let it follow whichever
 screen you touched last. Move the app you're using from one screen to the other with one combo.
 
+### Gamepad mode: play on another device
+
+Use the Thor as a controller for a PC, a Steam Deck, a console or a phone, over a **USB cable** or
+**Bluetooth**. It shows up there as a standard gamepad, so there's nothing to install. Linux,
+SteamOS and Android map every button like an Xbox controller; on Windows and macOS you map it once
+in Steam. Every button press goes out the moment the controller reports it. Optionally both screens
+turn off while it's connected, so they use no power and can't burn in.
+
 ### Game mode
 
 Press **AYN + Y** in a game and the Thor is all its: other apps close, background apps stay
@@ -71,7 +79,8 @@ the screen turns off.
 
 Hold **Home** and the app you're in zooms out into a row of cards, with the home screen always
 on the far right. Flick or press ◀ ▶ to move, **A** to open, **X** to close an app, **Y** to
-close all. A quick press of Home slides you over to the home screen in the same motion.
+close all. A quick press of Home slides you over to the home screen in the same motion. The
+background matches Cocoon's, light or dark with the system's dark theme.
 
 <p align="center">
   <img src="docs/images/recents.gif" width="430" alt="Holding Home: the app zooms out into the recent apps row">
@@ -86,6 +95,9 @@ covers what you're typing into. The top half is a **touchpad**: swipe to move th
 character at a time (with a tick for every character), tap **Select** to mark text, then **Copy**
 or **Paste**. The keys work like an iPad's: every key shows a number or symbol above its letter.
 **Swipe down** on the key to type it, and **hold** a key for its accents.
+
+Hold the Thor upright (top screen in portrait) and the same keys appear as an ordinary keyboard at
+the bottom of the top screen instead, since the bottom screen is off to the side.
 
 <p align="center">
   <img src="docs/images/keyboard-typing.png" width="430" alt="Typing into Settings on the top screen with Thor Keyboard on the bottom screen">
@@ -108,6 +120,7 @@ services for hardware the Thor doesn't have are stopped, and swap compresses bet
 * Auto-rotate works the right way round (LineageOS had the motion sensors 90° off).
 * Cocoon shows LineageOS's Browser and Gallery in "All apps".
 * If the bottom screen boots up dark, Thor Control wakes it.
+* With the lid closed, the power button does nothing, so the Thor can't wake up in a bag.
 * Stick lights: solid, breathing or rainbow, per stick or both, any colour.
 
 ---
@@ -197,6 +210,24 @@ tap **AYN** and it stays on for that game. Press **AYN + Y** again to switch gam
 </details>
 
 <details>
+<summary><b>Play on a PC or another device (gamepad mode)</b></summary>
+
+Open the menu (**AYN**), tap **Controller**, then **Gamepad mode**.
+
+* **USB cable:** choose **USB cable**, switch gamepad mode on and connect the Thor's USB-C port to
+  the other device. adb keeps working over the same cable.
+* **Bluetooth:** choose **Bluetooth** and switch gamepad mode on. The first time, tap **Pair a new
+  device**, tap **Allow** on the top screen, then pair "Thor" from the other device's Bluetooth
+  settings. After that the Thor reconnects to the last device by itself.
+* **Turn off both screens** puts the Thor to sleep as soon as the other device connects; the
+  controller keeps working. **AYN** or the power button turns the screens back on, and they also
+  come back on if the connection drops.
+
+While gamepad mode is on, the controller only reaches the other device. AYN shortcuts still work on
+the Thor. Switch gamepad mode off in the same place to get the controller back.
+</details>
+
+<details>
 <summary><b>Switch between apps</b></summary>
 
 Hold **Home** for half a second. The app you're in becomes a card in the middle, your other apps
@@ -225,6 +256,8 @@ are to the left, and the home screen is on the far right.
 * **Select, copy, paste:** tap **Select**, swipe to mark the text, tap **Copy**. **Paste** puts in
   what's on the clipboard.
 * **Hide it:** the keyboard button at the top right, or **Back**.
+* **Held upright:** turn the Thor so the top screen is in portrait and the keys appear at the bottom
+  of the top screen, with Paste and hide above them.
 </details>
 
 ## Cheat sheet
@@ -255,6 +288,10 @@ keyboard once (see [Install](#install), step 5).
 
 **The bottom screen stays black after a reboot.** That's a LineageOS quirk; Thor Control power-cycles
 the panel after a few seconds. Tapping **AYN** also wakes it.
+
+**The other device doesn't see the gamepad over USB.** Use a data cable and make sure nothing
+else on the Thor (a USB mode in Settings) changed the connection; Thor Control adds the gamepad
+back within a few seconds if Android rebuilt it. Some consoles only accept their own controllers.
 
 **I miss swipe navigation.** Gesture navigation came from Trebuchet, which Thor Control switches
 off to save memory. Switching the module off in Magisk brings both back after a reboot.

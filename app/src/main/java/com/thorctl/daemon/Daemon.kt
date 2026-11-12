@@ -39,6 +39,13 @@ internal class Daemon : InputWatcher.Listener {
         hasClient = { server.hasClients },
         onHomeShown = { nudgeGame() },
     )
+    private val gamepad = Gamepad(
+        input,
+        sendToApp = { server.broadcast(it) },
+        onChanged = { broadcastState() },
+        sleepScreens = { SystemServices.injectKey(KeyEvent.KEYCODE_SLEEP, displays.topId) },
+        wakeScreens = { SystemServices.injectKey(KeyEvent.KEYCODE_WAKEUP, displays.topId) },
+    )
     private val sched = Executors.newScheduledThreadPool(2) { Thread(it, "sched") }
 
     @Volatile
@@ -59,6 +66,7 @@ internal class Daemon : InputWatcher.Listener {
         cfg.load()
         displays.refresh()
         game.init(cfg.gameOptions)
+        gamepad.init(cfg.gamepadTransport, cfg.gamepadScreensOff)
         displays.setBottomTouch(true) // never leave touch disabled from a previous crash
 
         leds.apply(cfg.leds)
@@ -106,6 +114,7 @@ internal class Daemon : InputWatcher.Listener {
             lastInteractive = interactive
             leds.setAwake(interactive)
             if (interactive) displays.onWake()
+            if (interactive) gamepad.onScreensWoken()
             if (interactive && displays.bottomForcedOff) {
                 // Waking powers every display back on; hold the bottom one off again.
                 for (delay in longArrayOf(150, 600, 1500)) sched.schedule({ displays.reassertBottomOff() }, delay, TimeUnit.MILLISECONDS)
@@ -115,6 +124,7 @@ internal class Daemon : InputWatcher.Listener {
         if (recents.isOpen && (!interactive || !server.hasClients)) recents.close()
         if (!server.hasClients) keyboardVisible = false
         game.tick(interactive)
+        gamepad.tick()
         if (tickCount % 5 == 0L) {
             val before = displays.bottomId
             displays.refresh()
@@ -144,6 +154,7 @@ internal class Daemon : InputWatcher.Listener {
         if (File("$MODULE_DIR/disable").exists() || File("$MODULE_DIR/remove").exists()) {
             logi("module disabled or removed, exiting")
             game.setEnabled(false)
+            gamepad.shutdown()
             kotlin.system.exitProcess(0)
         }
     }
@@ -171,6 +182,13 @@ internal class Daemon : InputWatcher.Listener {
     // ---- buttons ----------------------------------------------------------------------------
 
     override fun onAynTap() {
+        // Gamepad mode with the screens asleep: AYN brings them back (the controller stays on
+        // the other device).
+        if (gamepad.state.on && !SystemServices.isInteractive()) {
+            gamepad.onScreensWoken()
+            SystemServices.injectKey(KeyEvent.KEYCODE_WAKEUP, displays.topId)
+            return
+        }
         if (recents.isOpen) {
             recents.back()
             return
@@ -354,6 +372,7 @@ internal class Daemon : InputWatcher.Listener {
         fanKernelMode = fan.kernelMode,
         fanOverride = game.fanOverride.orEmpty(),
         game = game.state(),
+        gamepad = gamepad.state,
     )
 
     private fun broadcastState() {
@@ -383,6 +402,30 @@ internal class Daemon : InputWatcher.Listener {
             }
             "kb_visible" -> {
                 keyboardVisible = cmd.optBoolean("on")
+                return
+            }
+            "gamepad" -> {
+                gamepad.setOn(cmd.optBoolean("on"))
+                return
+            }
+            "gamepad_transport" -> {
+                gamepad.setTransport(cmd.optString("transport"))
+                synchronized(this) {
+                    cfg.gamepadTransport = gamepad.state.transport
+                    saveSoon()
+                }
+                return
+            }
+            "gamepad_screens_off" -> {
+                gamepad.setScreensOff(cmd.optBoolean("on"))
+                synchronized(this) {
+                    cfg.gamepadScreensOff = gamepad.state.screensOff
+                    saveSoon()
+                }
+                return
+            }
+            "gamepad_bt" -> {
+                gamepad.onBluetooth(cmd.optBoolean("connected"), cmd.optString("host"))
                 return
             }
             "recents_open", "recents_home", "recents_remove", "recents_clear", "recents_close", "home_go", "overlay_done" -> {

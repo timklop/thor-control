@@ -95,7 +95,11 @@ object KeyboardController {
         selEnd = info.initialSelEnd.coerceAtLeast(0)
     }
 
-    fun onShow(info: EditorInfo) {
+    /**
+     * Typing starts. [inline]: the keyboard service shows the keys itself, on the top screen (the
+     * Thor is held upright); otherwise they go on the bottom screen.
+     */
+    fun onShow(info: EditorInfo, inline: Boolean) {
         editor = info
         val cls = info.inputType and InputType.TYPE_MASK_CLASS
         val layer = if (cls == InputType.TYPE_CLASS_NUMBER || cls == InputType.TYPE_CLASS_PHONE) Layer.SYMBOLS else Layer.LETTERS
@@ -103,11 +107,18 @@ object KeyboardController {
         autoShift()
         refreshPreview()
         main.removeCallbacks(removeRunnable)
-        show()
+        inlineShown = inline
+        if (inline) {
+            _visible.value = false
+            removeNow()
+        } else {
+            show()
+        }
         DaemonClient.keyboardVisible(true)
     }
 
     fun onHide() {
+        inlineShown = false
         _visible.value = false
         DaemonClient.keyboardVisible(false)
         _ui.value = _ui.value.copy(selecting = false)
@@ -170,10 +181,14 @@ object KeyboardController {
 
     /** Controller buttons forwarded by the daemon while the keyboard is up (L1 / R1 = shift). */
     fun onControllerKey(key: String) {
-        if (key == "shift" && _visible.value) shift()
+        if (key == "shift" && isShown) shift()
     }
 
-    val isShown: Boolean get() = _visible.value
+    /** Keys are up on the top screen, drawn by the keyboard service (the Thor is held upright). */
+    @Volatile
+    private var inlineShown = false
+
+    val isShown: Boolean get() = _visible.value || inlineShown
 
     fun space() {
         ime?.sendKeyChar(' ')

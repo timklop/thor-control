@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -76,13 +78,43 @@ private val Lift = CubicBezierEasing(0.4f, 0f, 1f, 1f)
 /** A card is the full screen at this scale. */
 private const val CARD_SCALE = 0.7f
 
-// The bottom screen's (Cocoon's) background: a linear vertical gradient, sampled from the panel.
-private val BackdropTop = Color(0xFFEFEFF3)
-private val BackdropBottom = Color(0xFFCFCFDA)
-private val BackdropMid = Color(0xFFDFDFE6)
-private val Ink = Color(0xFF1B1B1F)
-private val InkSecondary = Color(0xFF5E5E6A)
-private val ChipFill = Color(0x14000000)
+/** Backdrop and text colors; the backdrop is the bottom screen's (Cocoon's) background. */
+@Immutable
+private class RecentsColors(
+    val backdropTop: Color,
+    val backdropBottom: Color,
+    /** Wash over the cards beside the centre one. */
+    val backdropMid: Color,
+    val ink: Color,
+    val inkSecondary: Color,
+    val chip: Color,
+    /** Behind a card that has no picture yet. */
+    val cardFill: Color,
+)
+
+// Both backdrops are linear vertical gradients, sampled from Cocoon on the panel.
+private val LightColors = RecentsColors(
+    backdropTop = Color(0xFFEFEFF3),
+    backdropBottom = Color(0xFFCFCFDA),
+    backdropMid = Color(0xFFDFDFE6),
+    ink = Color(0xFF1B1B1F),
+    inkSecondary = Color(0xFF5E5E6A),
+    chip = Color(0x14000000),
+    cardFill = Color.White,
+)
+private val DarkColors = RecentsColors(
+    backdropTop = Color(0xFF2A2A2A),
+    backdropBottom = Color(0xFF1E1E1E),
+    backdropMid = Color(0xFF242424),
+    ink = Color(0xFFECECEC),
+    inkSecondary = Color(0xFFA0A0A0),
+    chip = Color(0x29FFFFFF),
+    cardFill = Color(0xFF303030),
+)
+
+/** Follows the system dark theme setting, like Cocoon. */
+@Composable
+private fun recentsColors(): RecentsColors = if (isSystemInDarkTheme()) DarkColors else LightColors
 
 /** What the stage asks the controller to do. */
 interface RecentsActions {
@@ -325,9 +357,10 @@ fun RecentsStage(
             return -1
         }
 
-        // Backdrop: solid, the same off-white gradient as the bottom screen. At zoom 1 the card
-        // covers it completely, so it simply appears around the card as the card shrinks.
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(BackdropTop, BackdropBottom))))
+        // Backdrop: solid, the same gradient as the bottom screen (light or dark). At zoom 1 the
+        // card covers it completely, so it simply appears around the card as the card shrinks.
+        val rc = recentsColors()
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(rc.backdropTop, rc.backdropBottom))))
 
         items.forEachIndexed { i, c ->
             key(c.key) {
@@ -387,7 +420,7 @@ fun RecentsStage(
                         Hint("X", "Close")
                         Hint("Y", "Close all")
                     } else {
-                        Text("No recent apps", style = MaterialTheme.typography.bodyMedium, color = InkSecondary)
+                        Text("No recent apps", style = MaterialTheme.typography.bodyMedium, color = rc.inkSecondary)
                         Spacer(Modifier.width(24.dp))
                     }
                     Hint("B", "Back")
@@ -461,11 +494,12 @@ fun RecentsStage(
 
 @Composable
 private fun CardLayer(card: Card, layer: GraphicsLayerScope.() -> Unit, dim: () -> Float) {
+    val rc = recentsColors()
     Box(
         Modifier
             .fillMaxSize()
             .graphicsLayer(layer)
-            .background(Color.White),
+            .background(rc.cardFill),
     ) {
         val img = card.image
         if (img != null) {
@@ -483,7 +517,7 @@ private fun CardLayer(card: Card, layer: GraphicsLayerScope.() -> Unit, dim: () 
             Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = dim() }
-                .background(BackdropMid),
+                .background(rc.backdropMid),
         )
     }
 }
@@ -492,6 +526,7 @@ private fun CardLayer(card: Card, layer: GraphicsLayerScope.() -> Unit, dim: () 
 private fun CardLabel(card: Card, width: Dp, modifier: Modifier) {
     val cs = MaterialTheme.colorScheme
     val qs = qsColors()
+    val rc = recentsColors()
     Row(modifier.width(width).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (card.isHome) {
             Box(Modifier.size(30.dp).clip(CircleShape).background(qs.iconActive), contentAlignment = Alignment.Center) {
@@ -500,13 +535,13 @@ private fun CardLabel(card: Card, width: Dp, modifier: Modifier) {
         } else if (card.icon != null) {
             Image(card.icon, null, Modifier.size(30.dp))
         } else {
-            Box(Modifier.size(30.dp).clip(CircleShape).background(ChipFill))
+            Box(Modifier.size(30.dp).clip(CircleShape).background(rc.chip))
         }
         Spacer(Modifier.width(10.dp))
         Text(
             if (card.isHome) "Home" else card.label,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-            color = Ink,
+            color = rc.ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
@@ -526,23 +561,24 @@ private fun CardLabel(card: Card, width: Dp, modifier: Modifier) {
 
 @Composable
 private fun Hint(button: String, action: String) {
+    val rc = recentsColors()
     Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier
                 .height(28.dp)
                 .width(if (button.length > 1) 48.dp else 28.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(ChipFill),
+                .background(rc.chip),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 button,
                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                color = Ink,
+                color = rc.ink,
                 textAlign = TextAlign.Center,
             )
         }
         Spacer(Modifier.width(8.dp))
-        Text(action, style = MaterialTheme.typography.bodyMedium, color = Ink)
+        Text(action, style = MaterialTheme.typography.bodyMedium, color = rc.ink)
     }
 }
