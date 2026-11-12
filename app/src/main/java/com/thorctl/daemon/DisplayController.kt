@@ -31,6 +31,11 @@ internal class DisplayController {
 
     val bottomOn: Boolean get() = !bottomForcedOff
 
+    /** Gamepad mode has the screens dark ([setGamepadDark]). */
+    @Volatile
+    var gamepadDark = false
+        private set
+
     fun refresh() {
         val internal = try {
             SystemServices.displays().filter { it.type == TYPE_INTERNAL }
@@ -87,6 +92,11 @@ internal class DisplayController {
     fun setBottomPower(on: Boolean): Boolean {
         val id = bottomId
         if (id < 0) return false
+        if (gamepadDark) {
+            // The bottom panel has to stay on while the screens are dark; applied when they light up.
+            bottomForcedOff = !on
+            return true
+        }
         val ok = try {
             SystemServices.requestDisplayPower(id, if (on) STATE_UNKNOWN else STATE_OFF)
         } catch (e: Throwable) {
@@ -101,13 +111,37 @@ internal class DisplayController {
         return ok
     }
 
-    /** The power override can be dropped when the device wakes; put it back. */
-    fun reassertBottomOff() {
-        if (!bottomForcedOff || bottomId < 0) return
+    /** The power overrides can be dropped when the device wakes; put them back. */
+    fun reassertOverrides() {
         try {
-            SystemServices.requestDisplayPower(bottomId, STATE_OFF)
+            if (gamepadDark) {
+                if (topId >= 0) SystemServices.requestDisplayPower(topId, STATE_OFF)
+            } else if (bottomForcedOff && bottomId >= 0) {
+                SystemServices.requestDisplayPower(bottomId, STATE_OFF)
+            }
         } catch (_: Throwable) {
         }
+    }
+
+    /**
+     * Gamepad mode's "screens off". The controller's driver cuts the controller's power as soon
+     * as both panels are off (it follows the panels, not Android's sleep), so only the top panel
+     * goes off; the bottom one stays powered and the app covers it in black, which on OLED is no
+     * light, next to no power and no burn-in. Touch is off on both meanwhile.
+     */
+    fun setGamepadDark(dark: Boolean) {
+        if (dark == gamepadDark) return
+        gamepadDark = dark
+        try {
+            if (topId >= 0) SystemServices.requestDisplayPower(topId, if (dark) STATE_OFF else STATE_UNKNOWN)
+            // A bottom screen the user switched off has to be on while dark, and off again after.
+            if (bottomForcedOff && bottomId >= 0) SystemServices.requestDisplayPower(bottomId, if (dark) STATE_UNKNOWN else STATE_OFF)
+        } catch (e: Throwable) {
+            logw("gamepad screens ${if (dark) "dark" else "back"}: display power failed", e)
+        }
+        setTouch(TOP_TOUCH_NAME, !dark)
+        setBottomTouch(!dark && !bottomForcedOff)
+        logi("gamepad screens ${if (dark) "dark (top off, bottom black)" else "back on"}")
     }
 
     // ---- Bottom panel watchdog ------------------------------------------------------------
@@ -165,13 +199,15 @@ internal class DisplayController {
     }
 
     /** Ignore touches on the dark panel so nothing invisible gets tapped. */
-    fun setBottomTouch(enabled: Boolean) {
+    fun setBottomTouch(enabled: Boolean) = setTouch(BOTTOM_TOUCH_NAME, enabled)
+
+    private fun setTouch(name: String, enabled: Boolean) {
         try {
             SystemServices.inputDevices()
-                .filter { it.name == BOTTOM_TOUCH_NAME }
+                .filter { it.name == name }
                 .forEach { SystemServices.setInputDeviceEnabled(it.id, enabled) }
         } catch (e: Throwable) {
-            logw("toggle bottom touch failed", e)
+            logw("toggle touch ($name) failed", e)
         }
     }
 
@@ -182,5 +218,6 @@ internal class DisplayController {
         const val STATE_ON = 2
         const val MIN_BRIGHTNESS = 0.004f
         const val BOTTOM_TOUCH_NAME = "fts_ts_secondary"
+        const val TOP_TOUCH_NAME = "fts_ts"
     }
 }

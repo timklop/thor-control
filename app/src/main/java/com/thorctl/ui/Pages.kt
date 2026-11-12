@@ -663,8 +663,8 @@ fun GamepadPage(state: DaemonState?, onBack: () -> Unit) {
         Text("While connected", style = MaterialTheme.typography.titleSmall, color = cs.primary)
         Spacer(Modifier.height(8.dp))
         SwitchTile(
-            Icons.Rounded.DesktopAccessDisabled, "Turn off both screens",
-            "No power to the panels and no burn-in. AYN or power turns them back on",
+            Icons.Rounded.DesktopAccessDisabled, "Darken both screens",
+            "Top screen off, bottom screen black: next to no power and no burn-in. AYN or power brings them back",
             g.screensOff, enabled,
         ) { DaemonClient.setGamepadScreensOff(it) }
         Spacer(Modifier.height(12.dp))

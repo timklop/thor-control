@@ -113,6 +113,14 @@ internal object SystemServices {
         true
     }
 
+    /**
+     * User activity on [displayId]'s power group, as a touch would be: restarts its screen timeout
+     * (and brightens it from dim). Each panel can be its own power group, so call it per display.
+     */
+    fun userActivity(displayId: Int) {
+        power.call("userActivity", displayId, android.os.SystemClock.uptimeMillis(), 0 /* USER_ACTIVITY_EVENT_OTHER */, 0)
+    }
+
     /** Display of the focused task, or -1. */
     fun focusedDisplayId(): Int = try {
         atm.call("getFocusedRootTaskInfo")?.let { field(it, "displayId") as? Int } ?: -1

@@ -146,10 +146,12 @@ internal class InputWatcher(private val listener: Listener) {
         post { listener.onCombo(c) }
     }
 
-    // ---- Lid: the power button does nothing while it is closed ----------------------------------
+    // ---- Power button: ignored with the lid closed, handled by gamepad mode -------------------
     // The power button is a PMIC key that wakes the SoC from suspend. With the lid closed we hold
     // an exclusive grab on it, so Android never sees the press and the screens stay off; the
-    // device drops back to sleep by itself. The PMIC's long-press hardware reset still works.
+    // device drops back to sleep by itself. Gamepad mode takes it over the same way: Android must
+    // not go to sleep then (the controller would lose power), so presses go to its handler. The
+    // PMIC's long-press hardware reset still works.
 
     private val lidLock = Any()
     private var powerGrab: FileInputStream? = null
@@ -157,6 +159,17 @@ internal class InputWatcher(private val listener: Listener) {
     @Volatile
     var lidClosed = false
         private set
+
+    @Volatile
+    private var powerHandler: ((down: Boolean) -> Unit)? = null
+
+    /** Power button presses (down / up) go to [handler] instead of Android; null gives them back. */
+    fun setPowerKeyHandler(handler: ((down: Boolean) -> Unit)?) {
+        synchronized(lidLock) {
+            powerHandler = handler
+            updatePowerGrab()
+        }
+    }
 
     /** Current lid switch state through EVIOCGSW, or null if it can't be read. */
     private fun lidClosedNow(fd: FileDescriptor): Boolean? = try {
@@ -168,36 +181,48 @@ internal class InputWatcher(private val listener: Listener) {
 
     private fun setLidClosed(closed: Boolean) {
         synchronized(lidLock) {
+            if (closed != lidClosed) logi(if (closed) "lid closed: power button ignored" else "lid open")
             lidClosed = closed
-            if (closed == (powerGrab != null)) return
-            if (!closed) {
-                try {
-                    powerGrab?.close()
-                } catch (_: Exception) {
+            updatePowerGrab()
+        }
+    }
+
+    private fun updatePowerGrab() {
+        val want = lidClosed || powerHandler != null
+        if (want == (powerGrab != null)) return
+        if (!want) {
+            try {
+                powerGrab?.close()
+            } catch (_: Exception) {
+            }
+            powerGrab = null
+            logi("power button back to normal")
+            return
+        }
+        val node = findNode { it.name == POWER_KEY_NAME } ?: findNode { it.name.contains("pwrkey") && it.hasKey(KEY_POWER) }
+        if (node == null) {
+            logw("power button input node not found")
+            return
+        }
+        val s = try {
+            FileInputStream(node).also { IOCTL_INT.invoke(null, it.fd, EVIOCGRAB) }
+        } catch (e: Throwable) {
+            logw("grabbing the power button failed", e)
+            return
+        }
+        powerGrab = s
+        logi("power button grabbed ($node)")
+        thread(name = "pwrkey", isDaemon = true) {
+            try {
+                readEvents(s) { t, c, v ->
+                    if (t != EV_KEY || c != KEY_POWER || v == 2) return@readEvents
+                    when {
+                        lidClosed -> if (v == 1) logi("power button pressed with the lid closed: ignored")
+                        else -> powerHandler?.let { h -> post { h(v == 1) } }
+                    }
                 }
-                powerGrab = null
-                logi("lid open: power button back to normal")
-                return
-            }
-            val node = findNode { it.name == POWER_KEY_NAME } ?: findNode { it.name.contains("pwrkey") && it.hasKey(KEY_POWER) }
-            if (node == null) {
-                logw("power button input node not found")
-                return
-            }
-            val s = try {
-                FileInputStream(node).also { IOCTL_INT.invoke(null, it.fd, EVIOCGRAB) }
-            } catch (e: Throwable) {
-                logw("grabbing the power button failed", e)
-                return
-            }
-            powerGrab = s
-            logi("lid closed: power button ignored ($node)")
-            thread(name = "pwrkey", isDaemon = true) {
-                try {
-                    readEvents(s) { t, c, v -> if (t == EV_KEY && c == KEY_POWER && v == 1) logi("power button pressed with the lid closed: ignored") }
-                } catch (_: Exception) {
-                    // closed when the lid opens
-                }
+            } catch (_: Exception) {
+                // closed when neither needs it any more
             }
         }
     }

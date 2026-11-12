@@ -14,6 +14,7 @@ class ThorApp : Application() {
         DaemonClient.start()
         OverlayController.init(this)
         BluetoothGamepad.init(this)
+        Blackout.init()
     }
 }
 

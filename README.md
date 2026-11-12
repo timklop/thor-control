@@ -66,7 +66,7 @@ cable** or **Bluetooth**. It presents itself as a Google Stadia Controller, a st
 devices already know, so there's nothing to install. Macs list it under Game Controllers in System
 Settings and games use it directly. Linux, SteamOS and Android map every button, and Steam knows it
 on every system. Every button press goes out the moment the controller reports it. Optionally both
-screens turn off while it's connected, so they use no power and can't burn in.
+screens go dark while it's connected, so they use next to no power and can't burn in.
 
 ### Game mode
 
@@ -222,9 +222,13 @@ Open the menu (**AYN**), tap **Controller**, then **Gamepad mode**.
   settings. After that the Thor reconnects to the last device by itself.
 * **On a Mac** the Thor appears in System Settings > Game Controllers. Home opens the Games app,
   as on any controller, Select is Options and Back is Share.
-* **Turn off both screens** puts the Thor to sleep as soon as the other device connects; the
-  controller keeps working. **AYN** or the power button turns the screens back on, and they also
-  come back on if the connection drops.
+* **Darken both screens** switches the top screen off and turns the bottom one fully black as soon
+  as the other device connects, and the controller keeps working. (With both panels fully off, the
+  Thor's controller loses power, so the bottom one stays on, showing black.) **AYN** or a press of
+  the power button brings the screens back, another press darkens them again, and they also come
+  back if the connection drops.
+* While gamepad mode is on, the Thor doesn't go to sleep, so the controller keeps working. Hold the
+  power button for the power menu.
 
 While gamepad mode is on, the controller only reaches the other device. AYN shortcuts still work on
 the Thor. Switch gamepad mode off in the same place to get the controller back.

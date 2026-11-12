@@ -214,8 +214,10 @@ data class GamepadState(
     val connected: Boolean = false,
     /** Name of the connected Bluetooth host, or empty. */
     val host: String = "",
-    /** Put both screens to sleep while a host is connected (the controller keeps working). */
+    /** Darken both screens while a host is connected (the controller keeps working). */
     val screensOff: Boolean = true,
+    /** The screens are dark right now: top panel off, bottom panel black (drawn by the app). */
+    val dark: Boolean = false,
     /** USB set-up failed (no gadget support or the port is in host mode). */
     val error: String = "",
 ) {
@@ -225,6 +227,7 @@ data class GamepadState(
         put("connected", connected)
         put("host", host)
         put("screensOff", screensOff)
+        put("dark", dark)
         put("error", error)
     }
 
@@ -241,6 +244,7 @@ data class GamepadState(
                 connected = o.optBoolean("connected"),
                 host = o.optString("host"),
                 screensOff = o.optBoolean("screensOff", d.screensOff),
+                dark = o.optBoolean("dark"),
                 error = o.optString("error"),
             )
         }

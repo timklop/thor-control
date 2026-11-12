@@ -27,24 +27,28 @@ import kotlin.concurrent.thread
  *    go to it over the socket, newest-wins and at most one per [BT_INTERVAL_MS], so the radio
  *    never builds a backlog.
  *
- * While gamepad mode is on, a kernel wakelock keeps the SoC out of suspend, so the screens can
- * sleep (by themselves, or right away with "screens off") without cutting the connection.
+ * While gamepad mode is on, Android must stay awake: the controller's driver cuts the
+ * controller's power when both panels are off, and Android's sleep turns both off. So user
+ * activity is reported on every tick (no screen timeout), the power button is taken over (a
+ * press darkens the screens or brings them back, a long press opens the power menu), and
+ * "screens off" means dark ([DisplayController.setGamepadDark]): top panel off, bottom panel
+ * black. A kernel wakelock keeps the SoC out of suspend besides.
  */
 internal class Gamepad(
     private val input: InputWatcher,
     /** Bluetooth report to the app (base64 payload). */
     private val sendToApp: (String) -> Unit,
     private val onChanged: () -> Unit,
-    private val sleepScreens: () -> Unit,
-    private val wakeScreens: () -> Unit,
+    /** Screens dark (true) or back to normal (false). */
+    private val setDark: (Boolean) -> Unit,
+    /** Keeps Android awake: user activity on every panel. */
+    private val keepAwake: () -> Unit,
+    /** Android went to sleep anyway (not the lid): wake it. */
+    private val wakeUp: () -> Unit,
+    private val isInteractive: () -> Boolean,
 ) {
     @Volatile
     var state = GamepadState()
-        private set
-
-    /** Both screens were put to sleep by us when the host connected. */
-    @Volatile
-    var screensSleptByUs = false
         private set
 
     private var grabbedAt = 0L
@@ -77,7 +81,7 @@ internal class Gamepad(
     @Synchronized
     fun setScreensOff(on: Boolean) {
         state = state.copy(screensOff = on)
-        if (on && state.on && state.connected && !screensSleptByUs) sleepNow()
+        if (state.on && state.connected) darken(on)
         onChanged()
     }
 
@@ -89,8 +93,10 @@ internal class Gamepad(
     }
 
     private fun start() {
-        state = state.copy(on = true, connected = false, host = "", error = "")
+        state = state.copy(on = true, connected = false, host = "", dark = false, error = "")
         wakelock(true)
+        keepAwake()
+        input.setPowerKeyHandler(::onPowerKey)
         if (state.transport == GamepadState.USB) {
             thread(name = "gamepad-usb-setup", isDaemon = true) {
                 val err = usbSetup()
@@ -122,11 +128,9 @@ internal class Gamepad(
             synchronized(usbLock) { (usbLock as Object).notifyAll() }
             thread(name = "gamepad-usb-teardown", isDaemon = true) { usbTeardown() }
         }
-        state = state.copy(on = false, connected = false, host = "", error = "")
-        if (screensSleptByUs) {
-            screensSleptByUs = false
-            wakeScreens()
-        }
+        input.setPowerKeyHandler(null)
+        if (state.dark) setDark(false)
+        state = state.copy(on = false, connected = false, host = "", dark = false, error = "")
         wakelock(false)
         logi("gamepad mode off")
     }
@@ -144,25 +148,64 @@ internal class Gamepad(
         if (connected == state.connected && host == state.host) return
         state = state.copy(connected = connected, host = host)
         logi("gamepad host ${if (connected) "connected ($host)" else "disconnected"}")
-        if (connected) {
-            if (state.screensOff) sleepNow()
-        } else if (screensSleptByUs) {
-            // Host gone: don't leave the Thor dark.
-            screensSleptByUs = false
-            wakeScreens()
-        }
+        // Dark while a host plays (if wanted); back on when it goes, so the Thor isn't left dark.
+        darken(connected && state.screensOff)
         onChanged()
     }
 
-    private fun sleepNow() {
-        screensSleptByUs = true
-        sleepScreens()
+    private fun darken(dark: Boolean) {
+        if (dark == state.dark) return
+        state = state.copy(dark = dark)
+        setDark(dark)
+        onChanged()
+    }
+
+    /** AYN tapped while dark: the screens come back (until the next connect or power press). */
+    @Synchronized
+    fun lightUp(): Boolean {
+        if (!state.dark) return false
+        darken(false)
+        return true
+    }
+
+    // ---- Power button (taken over while gamepad mode is on) ------------------------------------
+
+    private var powerDownAt = 0L
+    private var powerLongFired = false
+    private val powerTimer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { Thread(it, "gamepad-pwr").apply { isDaemon = true } }
+    private var powerLong: java.util.concurrent.ScheduledFuture<*>? = null
+
+    @Synchronized
+    private fun onPowerKey(down: Boolean) {
+        if (!state.on) return
+        if (down) {
+            powerDownAt = SystemClock.uptimeMillis()
+            powerLongFired = false
+            powerLong?.cancel(false)
+            powerLong = powerTimer.schedule({ onPowerLong() }, POWER_LONG_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            return
+        }
+        powerLong?.cancel(false)
+        if (powerLongFired) return
+        // A press: dark <-> on (and wake Android if it slept after all).
+        if (!isInteractive()) wakeUp()
+        darken(!state.dark)
+    }
+
+    /** Held: the power menu, on lit screens. */
+    @Synchronized
+    private fun onPowerLong() {
+        powerLongFired = true
+        darken(false)
+        thread(name = "gamepad-pwr-menu", isDaemon = true) { Sys.sh("input keyevent --longpress KEYCODE_POWER") }
     }
 
     /** Daemon exiting (module disabled): give USB and the controller back right now. */
     @Synchronized
     fun shutdown() {
         if (!state.on) return
+        input.setPowerKeyHandler(null)
+        if (state.dark) setDark(false)
         input.releaseGamepad()
         usbWriterOn = false
         if (state.transport == GamepadState.USB) usbTeardown()
@@ -170,16 +213,18 @@ internal class Gamepad(
         wakelock(false)
     }
 
-    /** The user woke the screens (power / AYN): leave them on. */
-    fun onScreensWoken() {
-        screensSleptByUs = false
-    }
-
     /** Every couple of seconds from the daemon's housekeeping. */
     @Synchronized
     fun tick() {
         if (!state.on) return
         wakelock(true)
+        keepAwake()
+        // Asleep anyway (an app, a timeout we missed): the controller is off now, wake up. A
+        // closed lid is the user putting the Thor away; that wins.
+        if (!input.lidClosed && !isInteractive()) {
+            logi("gamepad: Android went to sleep, waking it (the controller needs a panel on)")
+            wakeUp()
+        }
         // The controller node can come back as a new device (after a controller MCU reset).
         if (!input.gamepadGrabbed() && SystemClock.elapsedRealtime() - grabbedAt > 3000 && input.hasController) {
             input.releaseGamepad()
@@ -607,6 +652,9 @@ internal class Gamepad(
         const val BT_INTERVAL_MS = 8L
 
         const val WAKELOCK = "thorctl_gamepad"
+
+        /** Holding the power button this long opens the power menu. */
+        const val POWER_LONG_MS = 600L
         const val WAKELOCK_NS = 60_000_000_000L
     }
 }

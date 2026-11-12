@@ -43,8 +43,19 @@ internal class Daemon : InputWatcher.Listener {
         input,
         sendToApp = { server.broadcast(it) },
         onChanged = { broadcastState() },
-        sleepScreens = { SystemServices.injectKey(KeyEvent.KEYCODE_SLEEP, displays.topId) },
-        wakeScreens = { SystemServices.injectKey(KeyEvent.KEYCODE_WAKEUP, displays.topId) },
+        setDark = { displays.setGamepadDark(it) },
+        keepAwake = {
+            for (id in intArrayOf(displays.topId, displays.bottomId)) {
+                if (id < 0) continue
+                try {
+                    SystemServices.userActivity(id)
+                } catch (e: Throwable) {
+                    logw("gamepad: user activity on display $id failed", e)
+                }
+            }
+        },
+        wakeUp = { SystemServices.injectKey(KeyEvent.KEYCODE_WAKEUP, displays.topId) },
+        isInteractive = { SystemServices.isInteractive() },
     )
     private val sched = Executors.newScheduledThreadPool(2) { Thread(it, "sched") }
 
@@ -114,10 +125,9 @@ internal class Daemon : InputWatcher.Listener {
             lastInteractive = interactive
             leds.setAwake(interactive)
             if (interactive) displays.onWake()
-            if (interactive) gamepad.onScreensWoken()
-            if (interactive && displays.bottomForcedOff) {
-                // Waking powers every display back on; hold the bottom one off again.
-                for (delay in longArrayOf(150, 600, 1500)) sched.schedule({ displays.reassertBottomOff() }, delay, TimeUnit.MILLISECONDS)
+            if (interactive && (displays.bottomForcedOff || displays.gamepadDark)) {
+                // Waking powers every display back on; hold ours off again.
+                for (delay in longArrayOf(150, 600, 1500)) sched.schedule({ displays.reassertOverrides() }, delay, TimeUnit.MILLISECONDS)
             }
         }
         if (interactive) displays.healBottomPanel()
@@ -182,10 +192,10 @@ internal class Daemon : InputWatcher.Listener {
     // ---- buttons ----------------------------------------------------------------------------
 
     override fun onAynTap() {
-        // Gamepad mode with the screens asleep: AYN brings them back (the controller stays on
-        // the other device).
+        // Gamepad mode with the screens dark (or asleep after all): AYN brings them back (the
+        // controller stays on the other device).
+        if (gamepad.lightUp()) return
         if (gamepad.state.on && !SystemServices.isInteractive()) {
-            gamepad.onScreensWoken()
             SystemServices.injectKey(KeyEvent.KEYCODE_WAKEUP, displays.topId)
             return
         }

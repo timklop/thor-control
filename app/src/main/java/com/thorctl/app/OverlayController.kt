@@ -97,7 +97,7 @@ object OverlayController {
         if (isShowing) hide() else show()
     }
 
-    private fun bottomDisplay(): Display? {
+    fun bottomDisplay(): Display? {
         val dm = app.getSystemService(DisplayManager::class.java)
         val wanted = DaemonClient.state.value?.bottomDisplayId ?: -1
         if (wanted >= 0) dm.getDisplay(wanted)?.let { return it }
