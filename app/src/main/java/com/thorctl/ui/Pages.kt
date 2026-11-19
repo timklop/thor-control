@@ -102,8 +102,14 @@ private val PagePadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp,
 
 /** Connected button group (M3 Expressive): selected segment morphs to a rounder shape. */
 @Composable
-private fun ConnectedChoice(options: List<String>, selected: Int, enabled: Boolean = true, onSelect: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+private fun ConnectedChoice(
+    options: List<String>,
+    selected: Int,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onSelect: (Int) -> Unit,
+) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
         options.forEachIndexed { i, label ->
             ToggleButton(
                 checked = selected == i,
@@ -131,7 +137,13 @@ private fun ConnectedChoice(options: List<String>, selected: Int, enabled: Boole
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-fun FanPage(state: DaemonState?, stats: Stats?, onBack: () -> Unit) {
+fun FanPage(
+    state: DaemonState?,
+    stats: Stats?,
+    fahrenheit: Boolean,
+    onBack: () -> Unit,
+    onUnitChange: (Boolean) -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     val qs = qsColors()
     val profiles = state?.profiles ?: FanProfile.BUILTINS
@@ -140,6 +152,13 @@ fun FanPage(state: DaemonState?, stats: Stats?, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().padding(PagePadding)) {
         DetailHeader("Fan", onBack) {
+            ConnectedChoice(
+                options = listOf("°C", "°F"),
+                selected = if (fahrenheit) 1 else 0,
+                modifier = Modifier.width(176.dp),
+                onSelect = { onUnitChange(it == 1) },
+            )
+            Spacer(Modifier.width(8.dp))
             if (stats != null) {
                 Row(
                     Modifier
@@ -150,7 +169,7 @@ fun FanPage(state: DaemonState?, stats: Stats?, onBack: () -> Unit) {
                 ) {
                     FanGlyph(stats.fanPercent / 100f, cs.onTertiaryContainer, Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("${stats.fanTemp.toInt()}° · ${stats.fanPercent}%", style = MaterialTheme.typography.labelLarge, color = cs.onTertiaryContainer)
+                    Text("${formatTemperature(stats.fanTemp, fahrenheit)} · ${stats.fanPercent}%", style = MaterialTheme.typography.labelLarge, color = cs.onTertiaryContainer)
                 }
             }
         }
@@ -191,6 +210,7 @@ fun FanPage(state: DaemonState?, stats: Stats?, onBack: () -> Unit) {
                 profile = draft,
                 editable = !draft.isBuiltin,
                 liveTemp = stats?.fanTemp,
+                fahrenheit = fahrenheit,
                 livePct = stats?.fanPercent,
                 onChange = { draft = it },
                 onCommit = { DaemonClient.saveFanProfile(it) },
@@ -245,6 +265,7 @@ fun FanCurveEditor(
     profile: FanProfile,
     editable: Boolean,
     liveTemp: Float?,
+    fahrenheit: Boolean,
     livePct: Int?,
     onChange: (FanProfile) -> Unit,
     onCommit: (FanProfile) -> Unit,
@@ -316,7 +337,7 @@ fun FanCurveEditor(
         }
         for (t in 30..90 step 10) {
             drawLine(grid, Offset(px(t.toFloat()), top), Offset(px(t.toFloat()), top + ph), 1.dp.toPx())
-            val l = tm.measure("$t°", labelStyle)
+            val l = tm.measure(formatTemperature(t.toFloat(), fahrenheit), labelStyle)
             drawText(l, cs.onSurfaceVariant, Offset(px(t.toFloat()) - l.size.width / 2, top + ph + 6.dp.toPx()))
         }
 
@@ -342,7 +363,7 @@ fun FanCurveEditor(
                     drawCircle(cs.surfaceContainerHigh, r + 3.dp.toPx(), c)
                     drawCircle(cs.primary, r, c)
                     if (i == dragIndex) {
-                        val l = tm.measure("${p.temp.toInt()}° → ${p.pct.toInt()}%", labelStyle.copy(fontWeight = FontWeight.SemiBold))
+                        val l = tm.measure("${formatTemperature(p.temp, fahrenheit)} → ${p.pct.toInt()}%", labelStyle.copy(fontWeight = FontWeight.SemiBold))
                         drawText(l, cs.onSurface, Offset((c.x - l.size.width / 2).coerceIn(left, left + pw - l.size.width), c.y - r - l.size.height - 6.dp.toPx()))
                     }
                 } else {

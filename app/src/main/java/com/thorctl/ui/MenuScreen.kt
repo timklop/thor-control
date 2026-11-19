@@ -5,6 +5,7 @@ import com.thorctl.shared.BrightnessCurve
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.SharedPreferences
 import android.os.BatteryManager
 import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedContent
@@ -52,6 +53,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -135,6 +137,18 @@ fun MenuPanel(entered: Boolean, onOpenApp: (() -> Unit)?, modifier: Modifier = M
     val state by DaemonClient.state.collectAsState()
     val stats by DaemonClient.stats.collectAsState()
     val connected by DaemonClient.connected.collectAsState()
+    val context = LocalContext.current
+    val preferences = remember(context) { context.getSharedPreferences("display_preferences", Context.MODE_PRIVATE) }
+    var fahrenheit by remember(preferences) {
+        mutableStateOf(preferences.getBoolean(FahrenheitPreference, false))
+    }
+    DisposableEffect(preferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == FahrenheitPreference) fahrenheit = prefs.getBoolean(FahrenheitPreference, false)
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
     var page by remember { mutableStateOf(Page.MAIN) }
 
     AnimatedContent(
@@ -156,8 +170,11 @@ fun MenuPanel(entered: Boolean, onOpenApp: (() -> Unit)?, modifier: Modifier = M
     ) { p ->
         val back = { page = Page.MAIN }
         when (p) {
-            Page.MAIN -> MainPage(state, stats, connected, entered, onNavigate = { page = it }, onOpenApp = onOpenApp)
-            Page.FAN -> FanPage(state, stats, onBack = back)
+            Page.MAIN -> MainPage(state, stats, connected, entered, fahrenheit, onNavigate = { page = it }, onOpenApp = onOpenApp)
+            Page.FAN -> FanPage(
+                state, stats, fahrenheit, onBack = back,
+                onUnitChange = { preferences.edit().putBoolean(FahrenheitPreference, it).apply() },
+            )
             Page.LIGHTS -> LightsPage(state, onBack = back)
             Page.CONTROLLER -> ControllerPage(state, onBack = back, onGamepad = { page = Page.GAMEPAD })
             Page.GAMEPAD -> GamepadPage(state, onBack = { page = Page.CONTROLLER })
@@ -172,6 +189,7 @@ private fun MainPage(
     stats: Stats?,
     connected: Boolean,
     entered: Boolean,
+    fahrenheit: Boolean,
     onNavigate: (Page) -> Unit,
     onOpenApp: (() -> Unit)?,
 ) {
@@ -272,7 +290,7 @@ private fun MainPage(
             )
         }
         Spacer(Modifier.height(8.dp))
-        StatsGrid(stats, entered)
+        StatsGrid(stats, entered, fahrenheit)
     }
 }
 
@@ -358,7 +376,7 @@ private fun readBattery(ctx: Context): Pair<Int, Boolean> {
 
 /** Telemetry as two more rows of the tile grid (wavy rings instead of icon containers). */
 @Composable
-private fun StatsGrid(stats: Stats?, entered: Boolean) {
+private fun StatsGrid(stats: Stats?, entered: Boolean, fahrenheit: Boolean) {
     val cs = MaterialTheme.colorScheme
     val powerAccent = when {
         stats == null -> cs.primary
@@ -370,14 +388,14 @@ private fun StatsGrid(stats: Stats?, entered: Boolean) {
         StatTile(
             Icons.Rounded.Memory, "CPU",
             value = stats?.let { "${(it.cpuLoad * 100).toInt()}%" } ?: "–",
-            sub = stats?.let { "${"%.2f".format(it.cpuFreqMhz / 1000f)} GHz · ${it.cpuTemp.toInt()} °C" } ?: "",
+            sub = stats?.let { "${"%.2f".format(it.cpuFreqMhz / 1000f)} GHz · ${formatTemperature(it.cpuTemp, fahrenheit)}" } ?: "",
             progress = stats?.cpuLoad ?: 0f, accent = cs.primary,
             modifier = Modifier.weight(1f).enter(7, entered),
         )
         StatTile(
             Icons.Rounded.DeveloperBoard, "GPU",
             value = stats?.let { "${(it.gpuLoad * 100).toInt()}%" } ?: "–",
-            sub = stats?.let { "${it.gpuFreqMhz} MHz · ${it.gpuTemp.toInt()} °C" } ?: "",
+            sub = stats?.let { "${it.gpuFreqMhz} MHz · ${formatTemperature(it.gpuTemp, fahrenheit)}" } ?: "",
             progress = stats?.gpuLoad ?: 0f, accent = cs.tertiary,
             modifier = Modifier.weight(1f).enter(8, entered),
         )
@@ -396,7 +414,7 @@ private fun StatsGrid(stats: Stats?, entered: Boolean) {
         StatTile(
             Icons.Rounded.Bolt, "Power",
             value = stats?.let { powerValue(it) } ?: "–",
-            sub = stats?.let { powerSub(it) } ?: "",
+            sub = stats?.let { powerSub(it, fahrenheit) } ?: "",
             progress = (stats?.batteryLevel ?: 0) / 100f, accent = powerAccent,
             modifier = Modifier.weight(1f).enter(10, entered),
         )
@@ -410,10 +428,10 @@ private fun powerValue(s: Stats): String = when {
     else -> "0.0 W"
 }
 
-private fun powerSub(s: Stats): String = when {
+private fun powerSub(s: Stats, fahrenheit: Boolean): String = when {
     s.charging -> "Charging · ${s.batteryLevel}% · in ${"%.1f".format(s.inputWatts)} W"
     s.plugged -> "Plugged in · ${s.batteryLevel}%"
-    else -> "On battery · ${s.batteryLevel}% · ${s.batteryTemp.toInt()} °C"
+    else -> "On battery · ${s.batteryLevel}% · ${formatTemperature(s.batteryTemp, fahrenheit)}"
 }
 
 /** Shared header for detail pages: tonal back button (morphs on press) + title. */
