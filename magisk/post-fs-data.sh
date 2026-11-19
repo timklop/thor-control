@@ -4,6 +4,11 @@
 # files are picked up automatically and only our one-line changes are applied on top.
 MODDIR=${0%/*}
 
+# Android reads this when creating the top display's navigation bar.
+if [ ! -f /data/adb/thorctl/keep-top-gestures ]; then
+  resetprop -n qemu.hw.mainkeys 1
+fi
+
 overlay() { # overlay <stock path> <selinux context> <sed program>
   SRC=$1
   DST=$MODDIR/system$1

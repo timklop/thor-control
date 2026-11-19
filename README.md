@@ -110,14 +110,14 @@ the bottom of the top screen instead, since the bottom screen is off to the side
 ### A leaner system
 
 About 400 MB of extra free memory, without losing anything you use: Android stops locking files in
-memory, Trebuchet (only needed for gesture navigation and recents, both replaced) is switched off,
+memory, Trebuchet is switched off by default when another launcher is available,
 services for hardware the Thor doesn't have are stopped, and swap compresses better. The
 [details](docs/HOW-IT-WORKS.md#memory) are in How it works.
 
 ### And a few fixes
 
 * The bottom screen has no status bar or notification shade, and the top screen no navigation
-  bar: the hardware Home and Back buttons do that job, so apps get the full height.
+  bar by default. The hardware Home and Back buttons do that job, so apps get the full height.
 * Auto-rotate works the right way round (LineageOS had the motion sensors 90° off).
 * Cocoon shows LineageOS's Browser and Gallery in "All apps".
 * If the bottom screen boots up dark, Thor Control wakes it.
@@ -305,8 +305,10 @@ It remembers the Thor's IDs from when the two were first paired, and Thor Contro
 2.1 used different ones. Remove "Thor" from that device's Bluetooth settings, then pair again with
 **Pair a new device**.
 
-**I miss swipe navigation.** Gesture navigation came from Trebuchet, which Thor Control switches
-off to save memory. Switching the module off in Magisk brings both back after a reboot.
+**I miss swipe navigation.** In Magisk, open Modules and tap **Action** on the Thor Control card
+to toggle **top-screen swipe navigation**, then reboot. The option keeps Trebuchet available for
+Android's swipe-up Recents. Tap Action again and reboot to restore Thor Control's default navigation.
+Use Android's gesture navigation mode for swipe gestures.
 
 **Where are the logs and settings?** `/data/adb/thorctl/daemon.log`, `logcat -s thorctld` and
 `/data/adb/thorctl/config.json`.

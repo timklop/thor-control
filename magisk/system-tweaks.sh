@@ -4,8 +4,7 @@
 #   apply   service.sh, every boot (after boot_completed)
 #   revert  service.sh, when the module is disabled/removed from the Magisk app
 #
-# The navigation bar is hidden by system.prop (qemu.hw.mainkeys=1) and file pinning is switched
-# off by the framework overlay in /product/overlay; both go away with the module on reboot.
+# File pinning is switched off by the framework overlay in /product/overlay.
 MODE=${1:-apply}
 
 LAUNCHER3=com.android.launcher3 # Trebuchet: only the gesture-nav / recents provider here
@@ -42,10 +41,10 @@ zram_zstd() {
 case "$MODE" in
   apply)
     disabled $SE && pm enable $SE >/dev/null 2>&1
-    if other_home; then
+    if [ ! -f /data/adb/thorctl/keep-top-gestures ] && other_home; then
       disabled $LAUNCHER3 || { pm disable $LAUNCHER3 >/dev/null 2>&1 && echo "system-tweaks: disabled $LAUNCHER3"; }
     elif disabled $LAUNCHER3; then
-      pm enable $LAUNCHER3 >/dev/null 2>&1 && echo "system-tweaks: no other launcher, re-enabled $LAUNCHER3"
+      pm enable $LAUNCHER3 >/dev/null 2>&1 && echo "system-tweaks: re-enabled $LAUNCHER3"
     fi
     for s in $SERVICES; do
       [ "$(getprop init.svc.$s)" = running ] && stop "$s" && echo "system-tweaks: stopped $s"
